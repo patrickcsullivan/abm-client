@@ -59,14 +59,23 @@ update msg state =
 view : State -> Html Msg
 view state =
     div [ class "page" ]
-        [ div [ class "top-toolbar" ]
-            [ input [ class "server-input", placeholder "Server URL", value state.serverUrl, onInput ChangeServerUrl ] []
-            , a [ class "connect-button" ] [ text "Connect" ]
-            ]
+        [ topToolbarView state.serverUrl
         , paneView state.loadable
-        , div [ class "bottom-toolbar" ]
-            [ text "toolbar" ]
+        , bottomToolbarView
         ]
+
+
+topToolbarView : String -> Html Msg
+topToolbarView serverUrl =
+    div [ class "top-toolbar" ]
+        [ input [ class "server-input", placeholder "Server URL", value serverUrl, onInput ChangeServerUrl ] []
+        , a [ class "connect-button", onClick Connect ] [ text "Connect" ]
+        ]
+
+
+bottomToolbarView : Html Msg
+bottomToolbarView =
+    div [ class "bottom-toolbar" ] [ text "toolbar" ]
 
 
 paneView : Loadable GameState -> Html Msg
