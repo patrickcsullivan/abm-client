@@ -45,6 +45,20 @@ type Loadable a
 type alias GameState =
     { mapWidth : Int
     , mapHeight : Int
+    , cells : List Cell
+    , agents : List Agent
+    , camera : Camera
+    }
+
+
+type alias Cell =
+    { pos : ( Int, Int )
+    , grass : Int
+    }
+
+
+type alias Agent =
+    { pos : ( Float, Float )
     }
 
 
@@ -99,7 +113,7 @@ update msg state =
 
         Connect ->
             { state
-                | loadable = Loaded { mapWidth = 50, mapHeight = 50 }
+                | loadable = Loaded testGameState
             }
                 |> Debug.log "State"
                 |> withNoCmd
@@ -120,7 +134,7 @@ view : State -> Html Msg
 view state =
     div [ class "page" ]
         [ topToolbarView state.serverUrl
-        , paneView state.loadable
+        , paneView state.time state.windowSize state.resources state.loadable
         , bottomToolbarView
         ]
 
@@ -138,8 +152,8 @@ bottomToolbarView =
     div [ class "bottom-toolbar" ] [ text "toolbar" ]
 
 
-paneView : Loadable GameState -> Html Msg
-paneView loadable =
+paneView : Float -> ( Int, Int ) -> Resources -> Loadable GameState -> Html Msg
+paneView time windowSize resources loadable =
     let
         content =
             case loadable of
@@ -153,7 +167,7 @@ paneView loadable =
                     statusMessageView ("Error occured: " ++ e)
 
                 Loaded gs ->
-                    gameView gs
+                    gameView time windowSize gs.camera resources gs.cells gs.agents
     in
     div [ class "pane" ] [ content ]
 
@@ -163,6 +177,72 @@ statusMessageView msg =
     div [ class "status-message" ] [ text msg ]
 
 
-gameView : GameState -> Html Msg
-gameView _ =
-    div [ class "status-message" ] [ text "Connected." ]
+gameView : Float -> ( Int, Int ) -> Camera -> Resources -> List Cell -> List Agent -> Html Msg
+gameView time windowSize camera resources cells agents =
+    Game.render
+        { time = time / 1000
+        , size = windowSize
+        , camera = camera
+        }
+        (render resources camera cells agents)
+
+
+render : Resources -> Camera -> List Cell -> List Agent -> List Renderable
+render resources camera cells _ =
+    [ Render.spriteWithOptions
+        { position = ( 0, 0, 0 )
+        , size = ( 10, 5 )
+        , texture = Resources.getTexture "resources/grass4.png" resources
+        , rotation = 0
+        , pivot = ( 0, 0 )
+        , tiling = ( 10, 5 )
+        }
+    ]
+
+
+
+-- TEST DATA
+
+
+testGameState : GameState
+testGameState =
+    { mapWidth = 50
+    , mapHeight = 50
+    , cells = testCells
+    , agents = testAgents
+    , camera = Camera.fixedWidth 8 ( 0, 0 )
+    }
+
+
+testCells : List Cell
+testCells =
+    posRange ( 0, 0 ) ( 25, 25 )
+        |> List.map
+            (\p ->
+                { pos = p
+                , grass = modBy 4 (Tuple.first p + Tuple.second p)
+                }
+            )
+
+
+testAgents : List Agent
+testAgents =
+    posRange ( 5, 3 ) ( 12, 8 )
+        |> List.map
+            (\p ->
+                { pos =
+                    ( (Tuple.first p |> toFloat) + 0.5
+                    , (Tuple.second p |> toFloat) + 0.5
+                    )
+                }
+            )
+
+
+posRange : ( Int, Int ) -> ( Int, Int ) -> List ( Int, Int )
+posRange ( xi, yi ) ( xf, yf ) =
+    let
+        xs =
+            List.range xi xf
+    in
+    List.range yi yf
+        |> List.concatMap (\y -> List.map (\x -> ( x, y )) xs)
