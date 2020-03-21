@@ -1,0 +1,90 @@
+:root {
+    --normal-font-family: sans-serif;
+    --normal-font-size: 14px;
+
+    --white: #EAEAEB;
+    --gray-lighter: #C2C2C4;
+    --gray: #717275;
+    --gray-darkest: #35363A; 
+    --black: #212227;
+    --black-darkest: #090A0B;
+    --red: #F25F5C;
+    --yellow: #FFE066;
+    --blue: #247BA0;
+    --green: #72C27C;
+    --green-dark: #538E5B;
+    --green-darker: #3F6A44;
+    --green-darkest: #2A472E;
+
+    --pane-background: var(--gray-darkest);
+    --toolbar-background: var(--black);
+}
+
+html, body {
+    height: 100%;
+}
+
+.page {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    font-family: var(--normal-font-family);
+    font-size: var(--normal-font-size);
+}
+
+.pane {
+    flex: 1 0 auto;
+    background: var(--pane-background);
+}
+
+.top-toolbar {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    padding: 8px;
+    background: var(--toolbar-background);
+}
+
+.bottom-toolbar {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: row;
+    padding: 8px;
+    background: var(--toolbar-background);
+}
+
+.server-input {
+    margin-right: 8px;
+    padding: 5px;
+    font-size: var(--normal-font-size);
+    background: var(--gray-darkest);
+    color: var(--gray-lighter);
+    border: 0px;
+    border: 1px solid transparent;
+}
+
+.server-input::placeholder {
+    color: var(--gray);
+}
+
+.server-input:focus {
+    outline: none;
+    border: 1px solid var(--green);
+}
+
+.connect-button {
+    padding: 6.8px;
+    cursor: pointer;
+    color: var(--gray);
+}
+
+.connect-button:hover {
+    color: var(--white);
+    background: var(--green-dark);
+}
+
+.connect-button:active {
+    color: var(--white);
+    background: var(--green-darker);
+}
