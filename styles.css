@@ -15,9 +15,6 @@
     --green-dark: #538E5B;
     --green-darker: #3F6A44;
     --green-darkest: #2A472E;
-
-    --pane-background: var(--gray-darkest);
-    --toolbar-background: var(--black);
 }
 
 html, body {
@@ -32,10 +29,22 @@ html, body {
     font-size: var(--normal-font-size);
 }
 
+/* Main pane */
+
 .pane {
     flex: 1 0 auto;
-    background: var(--pane-background);
+    background: var(--gray-darkest);
 }
+
+.start-message {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--gray-lighter);
+}
+
+/* Top toolbar */
 
 .top-toolbar {
     flex-shrink: 0;
@@ -43,15 +52,7 @@ html, body {
     flex-direction: row;
     align-items: center;
     padding: 8px;
-    background: var(--toolbar-background);
-}
-
-.bottom-toolbar {
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: row;
-    padding: 8px;
-    background: var(--toolbar-background);
+    background: var(--black);
 }
 
 .server-input {
@@ -87,4 +88,14 @@ html, body {
 .connect-button:active {
     color: var(--white);
     background: var(--green-darker);
+}
+
+/* Bottom toolbar */
+
+.bottom-toolbar {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: row;
+    padding: 8px;
+    background: var(--black);
 }
