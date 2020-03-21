@@ -2,6 +2,10 @@ module Main exposing (Msg(..), main, update, view)
 
 import Browser
 import Browser.Events exposing (onResize)
+import Game.Resources as Resources exposing (Resources)
+import Game.TwoD as Game
+import Game.TwoD.Camera as Camera exposing (Camera)
+import Game.TwoD.Render as Render exposing (Renderable)
 import Html exposing (Html, a, div, input, text)
 import Html.Attributes exposing (class, placeholder, value)
 import Html.Events exposing (onClick, onInput)
@@ -10,15 +14,16 @@ import Html.Events exposing (onClick, onInput)
 main : Program ( Int, Int ) State Msg
 main =
     Browser.element
-        { init = \windowSize -> ( init windowSize, Cmd.none )
+        { init = \windowSize -> init windowSize
         , update = update
         , view = view
-        , subscriptions = \_ -> Sub.batch [ Browser.Events.onResize WindowResize ]
+        , subscriptions = \_ -> Sub.batch [ Browser.Events.onResize ResizeWindow ]
         }
 
 
 type alias State =
     { windowSize : ( Int, Int )
+    , resources : Resources
     , serverUrl : String
     , loadable : Loadable GameState
     }
@@ -37,16 +42,28 @@ type alias GameState =
     }
 
 
-init : ( Int, Int ) -> State
+init : ( Int, Int ) -> ( State, Cmd Msg )
 init windowSize =
-    { windowSize = windowSize
-    , serverUrl = ""
-    , loadable = NotStarted
-    }
+    ( { windowSize = windowSize
+      , resources = Resources.init
+      , serverUrl = ""
+      , loadable = NotStarted
+      }
+    , Cmd.map LoadResources
+        (Resources.loadTextures
+            [ "resources/grass0.png"
+            , "resources/grass1.png"
+            , "resources/grass2.png"
+            , "resources/grass3.png"
+            , "resources/grass4.png"
+            ]
+        )
+    )
 
 
 type Msg
-    = WindowResize Int Int
+    = ResizeWindow Int Int
+    | LoadResources Resources.Msg
     | Connect
     | ChangeServerUrl String
 
@@ -54,9 +71,15 @@ type Msg
 update : Msg -> State -> ( State, Cmd Msg )
 update msg state =
     case msg of
-        WindowResize x y ->
+        ResizeWindow x y ->
             { state
                 | windowSize = ( x, y )
+            }
+                |> withNoCmd
+
+        LoadResources rMsg ->
+            { state
+                | resources = Resources.update rMsg state.resources
             }
                 |> withNoCmd
 
