@@ -9,6 +9,8 @@ import Game.TwoD.Render as Render exposing (Renderable)
 import Html exposing (Html, a, div, input, text)
 import Html.Attributes exposing (class, placeholder, value)
 import Html.Events exposing (onClick, onInput)
+import Keyboard
+import Keyboard.Arrows
 
 
 main : Program ( Int, Int ) State Msg
@@ -22,6 +24,7 @@ main =
                 Sub.batch
                     [ Browser.Events.onResize ResizeWindow
                     , Browser.Events.onAnimationFrameDelta Tick
+                    , Sub.map PressKeys Keyboard.subscriptions
                     ]
         }
 
@@ -29,6 +32,7 @@ main =
 type alias State =
     { time : Float -- time in ms
     , windowSize : ( Int, Int )
+    , keys : List Keyboard.Key -- keys currently pressed
     , resources : Resources
     , serverUrl : String
     , loadable : Loadable GameState
@@ -66,6 +70,7 @@ init : ( Int, Int ) -> ( State, Cmd Msg )
 init windowSize =
     ( { time = 0
       , windowSize = windowSize
+      , keys = []
       , resources = Resources.init
       , serverUrl = ""
       , loadable = NotStarted
@@ -83,31 +88,20 @@ init windowSize =
 
 
 type Msg
-    = Tick Float
-    | ResizeWindow Int Int
-    | LoadResources Resources.Msg
+    = ChangeServerUrl String
     | Connect
-    | ChangeServerUrl String
+    | LoadResources Resources.Msg
+    | PressKeys Keyboard.Msg
+    | ResizeWindow Int Int
+    | Tick Float
 
 
 update : Msg -> State -> ( State, Cmd Msg )
 update msg state =
     case msg of
-        Tick dt ->
+        ChangeServerUrl url ->
             { state
-                | time = state.time + dt
-            }
-                |> withNoCmd
-
-        ResizeWindow x y ->
-            { state
-                | windowSize = ( x, y )
-            }
-                |> withNoCmd
-
-        LoadResources rMsg ->
-            { state
-                | resources = Resources.update rMsg state.resources
+                | serverUrl = url
             }
                 |> withNoCmd
 
@@ -118,9 +112,27 @@ update msg state =
                 |> Debug.log "State"
                 |> withNoCmd
 
-        ChangeServerUrl url ->
+        LoadResources rMsg ->
             { state
-                | serverUrl = url
+                | resources = Resources.update rMsg state.resources
+            }
+                |> withNoCmd
+
+        PressKeys kMsg ->
+            { state
+                | keys = Keyboard.update kMsg state.keys
+            }
+                |> withNoCmd
+
+        ResizeWindow x y ->
+            { state
+                | windowSize = ( x, y )
+            }
+                |> withNoCmd
+
+        Tick dt ->
+            { state
+                | time = state.time + dt
             }
                 |> withNoCmd
 
@@ -184,11 +196,11 @@ gameView time windowSize camera resources cells agents =
         , size = windowSize
         , camera = camera
         }
-        (render resources camera cells agents)
+        (render resources cells agents)
 
 
-render : Resources -> Camera -> List Cell -> List Agent -> List Renderable
-render resources camera cells _ =
+render : Resources -> List Cell -> List Agent -> List Renderable
+render resources _ _ =
     [ Render.spriteWithOptions
         { position = ( 0, 0, 0 )
         , size = ( 10, 5 )
@@ -210,7 +222,7 @@ testGameState =
     , mapHeight = 50
     , cells = testCells
     , agents = testAgents
-    , camera = Camera.fixedWidth 8 ( 0, 0 )
+    , camera = Camera.custom (\( w, h ) -> ( w / 100, h / 100 )) ( 0, 0 )
     }
 
 
