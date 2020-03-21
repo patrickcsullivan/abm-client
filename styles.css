@@ -47,14 +47,17 @@ html, body {
 /* Top toolbar */
 
 .top-toolbar {
-    /* Fix the toolbar at the top of the window, covering the top of the pane. */
+    /* Fix the toolbar at top of window, covering top of pane. */
     position: fixed;
     top: 0;
     width: 100%;
+
+    /* Internal layout */
     display: flex;
     flex-direction: row;
     align-items: center;
     padding: 8px;
+    
     background: var(--black);
 }
 
@@ -96,13 +99,15 @@ html, body {
 /* Bottom toolbar */
 
 .bottom-toolbar {
-    /* Fix the toolbar at the top of the window, covering the top of the pane. */
+    /* Fix the toolbar at bottom of window, covering bottom of pane. */
     position: fixed;
     bottom: 0;
     width: 100%;
 
+    /* Internal layout */
     display: flex;
     flex-direction: row;
     padding: 8px;
+
     background: var(--black);
 }
