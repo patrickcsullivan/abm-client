@@ -12,9 +12,16 @@ main =
 
 
 type alias State =
-    { uiState : UIState
-    , gameState : Maybe GameState
+    { serverUrl : String
+    , loadable : Loadable GameState
     }
+
+
+type Loadable a
+    = NotStarted
+    | Loading
+    | Error String
+    | Loaded a
 
 
 type alias GameState =
@@ -23,21 +30,10 @@ type alias GameState =
     }
 
 
-type alias UIState =
-    { serverUrl : String
-    }
-
-
 init : State
 init =
-    { uiState = initUIState
-    , gameState = Nothing
-    }
-
-
-initUIState : UIState
-initUIState =
     { serverUrl = ""
+    , loadable = NotStarted
     }
 
 
@@ -51,12 +47,12 @@ update msg state =
     case msg of
         Connect ->
             { state
-                | gameState = Just { mapWidth = 50, mapHeight = 50 }
+                | loadable = Loaded { mapWidth = 50, mapHeight = 50 }
             }
 
         ChangeServerUrl url ->
             { state
-                | uiState = { serverUrl = url }
+                | serverUrl = url
             }
 
 
@@ -64,12 +60,35 @@ view : State -> Html Msg
 view state =
     div [ class "page" ]
         [ div [ class "top-toolbar" ]
-            [ input [ class "server-input", placeholder "Server URL", value state.uiState.serverUrl, onInput ChangeServerUrl ] []
+            [ input [ class "server-input", placeholder "Server URL", value state.serverUrl, onInput ChangeServerUrl ] []
             , a [ class "connect-button" ] [ text "Connect" ]
             ]
-        , div [ class "pane" ]
-            [ div [ class "start-message" ] [ text "Connect to a server to start." ]
-            ]
+        , paneView state.loadable
         , div [ class "bottom-toolbar" ]
             [ text "toolbar" ]
         ]
+
+
+paneView : Loadable GameState -> Html Msg
+paneView loadable =
+    let
+        content =
+            case loadable of
+                NotStarted ->
+                    statusMessageView "Connect to a server to start."
+
+                Loading ->
+                    statusMessageView "Connecting."
+
+                Error e ->
+                    statusMessageView ("Error occured: " ++ e)
+
+                Loaded _ ->
+                    statusMessageView "Connected."
+    in
+    div [ class "pane" ] [ content ]
+
+
+statusMessageView : String -> Html Msg
+statusMessageView msg =
+    div [ class "status-message" ] [ text msg ]
