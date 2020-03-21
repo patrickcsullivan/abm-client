@@ -1,18 +1,25 @@
 module Main exposing (Msg(..), main, update, view)
 
 import Browser
-import Html exposing (Html, a, button, div, input, text)
+import Browser.Events exposing (onResize)
+import Html exposing (Html, a, div, input, text)
 import Html.Attributes exposing (class, placeholder, value)
 import Html.Events exposing (onClick, onInput)
 
 
-main : Program () State Msg
+main : Program ( Int, Int ) State Msg
 main =
-    Browser.sandbox { init = init, update = update, view = view }
+    Browser.element
+        { init = \windowSize -> ( init windowSize, Cmd.none )
+        , update = update
+        , view = view
+        , subscriptions = \_ -> Sub.batch [ Browser.Events.onResize WindowResize ]
+        }
 
 
 type alias State =
-    { serverUrl : String
+    { windowSize : ( Int, Int )
+    , serverUrl : String
     , loadable : Loadable GameState
     }
 
@@ -30,30 +37,46 @@ type alias GameState =
     }
 
 
-init : State
-init =
-    { serverUrl = ""
+init : ( Int, Int ) -> State
+init windowSize =
+    { windowSize = windowSize
+    , serverUrl = ""
     , loadable = NotStarted
     }
 
 
 type Msg
-    = Connect
+    = WindowResize Int Int
+    | Connect
     | ChangeServerUrl String
 
 
-update : Msg -> State -> State
+update : Msg -> State -> ( State, Cmd Msg )
 update msg state =
     case msg of
+        WindowResize x y ->
+            { state
+                | windowSize = ( x, y )
+            }
+                |> withNoCmd
+
         Connect ->
             { state
                 | loadable = Loaded { mapWidth = 50, mapHeight = 50 }
             }
+                |> Debug.log "State"
+                |> withNoCmd
 
         ChangeServerUrl url ->
             { state
                 | serverUrl = url
             }
+                |> withNoCmd
+
+
+withNoCmd : a -> ( a, Cmd Msg )
+withNoCmd x =
+    ( x, Cmd.none )
 
 
 view : State -> Html Msg
@@ -92,8 +115,8 @@ paneView loadable =
                 Error e ->
                     statusMessageView ("Error occured: " ++ e)
 
-                Loaded _ ->
-                    statusMessageView "Connected."
+                Loaded gs ->
+                    gameView gs
     in
     div [ class "pane" ] [ content ]
 
@@ -101,3 +124,8 @@ paneView loadable =
 statusMessageView : String -> Html Msg
 statusMessageView msg =
     div [ class "status-message" ] [ text msg ]
+
+
+gameView : GameState -> Html Msg
+gameView _ =
+    div [ class "status-message" ] [ text "Connected." ]
