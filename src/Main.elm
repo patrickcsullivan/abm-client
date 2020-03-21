@@ -17,12 +17,18 @@ main =
         { init = \windowSize -> init windowSize
         , update = update
         , view = view
-        , subscriptions = \_ -> Sub.batch [ Browser.Events.onResize ResizeWindow ]
+        , subscriptions =
+            \_ ->
+                Sub.batch
+                    [ Browser.Events.onResize ResizeWindow
+                    , Browser.Events.onAnimationFrameDelta Tick
+                    ]
         }
 
 
 type alias State =
-    { windowSize : ( Int, Int )
+    { time : Float -- time in ms
+    , windowSize : ( Int, Int )
     , resources : Resources
     , serverUrl : String
     , loadable : Loadable GameState
@@ -44,7 +50,8 @@ type alias GameState =
 
 init : ( Int, Int ) -> ( State, Cmd Msg )
 init windowSize =
-    ( { windowSize = windowSize
+    ( { time = 0
+      , windowSize = windowSize
       , resources = Resources.init
       , serverUrl = ""
       , loadable = NotStarted
@@ -62,7 +69,8 @@ init windowSize =
 
 
 type Msg
-    = ResizeWindow Int Int
+    = Tick Float
+    | ResizeWindow Int Int
     | LoadResources Resources.Msg
     | Connect
     | ChangeServerUrl String
@@ -71,6 +79,12 @@ type Msg
 update : Msg -> State -> ( State, Cmd Msg )
 update msg state =
     case msg of
+        Tick dt ->
+            { state
+                | time = state.time + dt
+            }
+                |> withNoCmd
+
         ResizeWindow x y ->
             { state
                 | windowSize = ( x, y )
