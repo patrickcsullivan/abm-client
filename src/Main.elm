@@ -149,7 +149,7 @@ topToolbarView serverUrl =
 
 bottomToolbarView : Html Msg
 bottomToolbarView =
-    div [ class "bottom-toolbar" ] [ text "toolbar" ]
+    div [ class "bottom-toolbar" ] []
 
 
 paneView : Float -> ( Int, Int ) -> Resources -> Loadable GameState -> Html Msg

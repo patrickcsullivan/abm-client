@@ -103,10 +103,12 @@ html, body {
     position: fixed;
     bottom: 0;
     width: 100%;
+    height: 14px;  /* TODO: Remove once there is content. */
 
     /* Internal layout */
     display: flex;
     flex-direction: row;
+    align-items: center;
     padding: 8px;
 
     background: var(--black);
