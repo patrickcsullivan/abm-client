@@ -23,8 +23,7 @@ html, body {
 
 .page {
     height: 100%;
-    display: flex;
-    flex-direction: column;
+    overflow: hidden;
     font-family: var(--normal-font-family);
     font-size: var(--normal-font-size);
 }
@@ -32,7 +31,8 @@ html, body {
 /* Main pane */
 
 .pane {
-    flex: 1 0 auto;
+    width: 100%;
+    height: 100%;
     background: var(--gray-darkest);
 }
 
@@ -47,7 +47,10 @@ html, body {
 /* Top toolbar */
 
 .top-toolbar {
-    flex-shrink: 0;
+    /* Fix the toolbar at the top of the window, covering the top of the pane. */
+    position: fixed;
+    top: 0;
+    width: 100%;
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -93,7 +96,11 @@ html, body {
 /* Bottom toolbar */
 
 .bottom-toolbar {
-    flex-shrink: 0;
+    /* Fix the toolbar at the top of the window, covering the top of the pane. */
+    position: fixed;
+    bottom: 0;
+    width: 100%;
+
     display: flex;
     flex-direction: row;
     padding: 8px;
