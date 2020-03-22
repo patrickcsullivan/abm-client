@@ -91,6 +91,16 @@ init windowSize =
     )
 
 
+initGameState : GameState
+initGameState =
+    { mapWidth = 64
+    , mapHeight = 64
+    , cells = testCells
+    , agents = testAgents
+    , camera = Camera.custom (\( w, h ) -> ( w / 75, h / 75 )) ( 32, -32 )
+    }
+
+
 
 -- UPDATE / MESSAGE
 
@@ -115,7 +125,7 @@ update msg state =
 
         Connect ->
             { state
-                | loadable = Loaded testGameState
+                | loadable = Loaded initGameState
             }
                 |> withNoCmd
 
@@ -183,7 +193,7 @@ moveCamera keys dt camera =
 
         v =
             -- 1 unit per second
-            1
+            3
 
         dx =
             toFloat arrows.x * v * dt / 1000
@@ -246,49 +256,75 @@ statusMessageView msg =
 
 
 gameView : Float -> ( Int, Int ) -> Camera -> Resources -> List Cell -> List Agent -> Html Msg
-gameView time windowSize camera resources cells agents =
+gameView time windowSize camera resources cells _ =
     Game.render
         { time = time / 1000
         , size = windowSize
         , camera = camera
         }
-        (render resources cells agents)
+        (renderCells resources cells)
 
 
-render : Resources -> List Cell -> List Agent -> List Renderable
-render resources _ _ =
-    [ Render.spriteWithOptions
-        { position = ( 0, 0, 0 )
-        , size = ( 10, 5 )
-        , texture = Resources.getTexture "resources/grass4.png" resources
-        , rotation = 0
-        , pivot = ( 0, 0 )
-        , tiling = ( 10, 5 )
+
+-- render : Resources -> List Cell -> List Agent -> List Renderable
+-- render resources _ _ =
+--     [ Render.spriteWithOptions
+--         { position = ( 0, 0, 0 )
+--         , size = ( 10, 5 )
+--         , texture = Resources.getTexture "resources/grass4.png" resources
+--         , rotation = 0
+--         , pivot = ( 0, 0 )
+--         , tiling = ( 10, 5 )
+--         }
+--     ]
+
+
+renderCells : Resources -> List Cell -> List Renderable
+renderCells resources =
+    List.map (cellSprite resources)
+
+
+cellSprite : Resources -> Cell -> Renderable
+cellSprite resources cell =
+    let
+        texture =
+            case cell.grass of
+                0 ->
+                    "resources/grass0.png"
+
+                1 ->
+                    "resources/grass1.png"
+
+                2 ->
+                    "resources/grass2.png"
+
+                3 ->
+                    "resources/grass3.png"
+
+                _ ->
+                    "resources/grass4.png"
+    in
+    Render.sprite
+        { texture = Resources.getTexture texture resources
+        , position =
+            ( Tuple.first cell.pos |> toFloat
+            , Tuple.second cell.pos * -1 |> toFloat
+            )
+        , size = ( 1, -1 )
         }
-    ]
 
 
 
 -- TEST DATA
 
 
-testGameState : GameState
-testGameState =
-    { mapWidth = 50
-    , mapHeight = 50
-    , cells = testCells
-    , agents = testAgents
-    , camera = Camera.custom (\( w, h ) -> ( w / 100, h / 100 )) ( 0, 0 )
-    }
-
-
 testCells : List Cell
 testCells =
-    posRange ( 0, 0 ) ( 25, 25 )
+    posRange ( 0, 0 ) ( 64, 64 )
         |> List.map
             (\p ->
                 { pos = p
-                , grass = modBy 4 (Tuple.first p + Tuple.second p)
+                , grass = modBy 5 (Tuple.first p + Tuple.second p)
                 }
             )
 
