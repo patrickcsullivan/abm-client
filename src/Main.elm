@@ -34,10 +34,7 @@ main =
 
 
 type alias State =
-    { time : Float -- time in ms
-    , windowSize : ( Int, Int )
-    , keys : List Keyboard.Key -- keys currently pressed
-    , resources : Resources
+    { windowSize : ( Int, Int )
     , serverUrl : String
     , loadable : Loadable GameState
     }
@@ -51,7 +48,10 @@ type Loadable a
 
 
 type alias GameState =
-    { mapWidth : Int
+    { time : Float -- time in ms
+    , keys : List Keyboard.Key -- keys currently pressed
+    , resources : Resources
+    , mapWidth : Int
     , mapHeight : Int
     , cells : List Cell
     , agents : List Agent
@@ -72,11 +72,8 @@ type alias Agent =
 
 init : ( Int, Int ) -> ( State, Cmd Msg )
 init windowSize =
-    ( { time = 0
+    ( { serverUrl = ""
       , windowSize = windowSize
-      , keys = []
-      , resources = Resources.init
-      , serverUrl = ""
       , loadable = NotStarted
       }
     , Cmd.map LoadResources
@@ -91,14 +88,27 @@ init windowSize =
     )
 
 
-initGameState : GameState
+initGameState : ( GameState, Cmd Msg )
 initGameState =
-    { mapWidth = 64
-    , mapHeight = 64
-    , cells = testCells
-    , agents = testAgents
-    , camera = Camera.custom (\( w, h ) -> ( w / 75, h / 75 )) ( 32, -32 )
-    }
+    ( { time = 0
+      , keys = []
+      , resources = Resources.init
+      , mapWidth = 64
+      , mapHeight = 64
+      , cells = testCells
+      , agents = testAgents
+      , camera = Camera.custom (\( w, h ) -> ( w / 75, h / 75 )) ( 32, 32 )
+      }
+    , Cmd.map LoadResources
+        (Resources.loadTextures
+            [ "resources/grass0.png"
+            , "resources/grass1.png"
+            , "resources/grass2.png"
+            , "resources/grass3.png"
+            , "resources/grass4.png"
+            ]
+        )
+    )
 
 
 
@@ -118,90 +128,170 @@ update : Msg -> State -> ( State, Cmd Msg )
 update msg state =
     case msg of
         ChangeServerUrl url ->
-            { state
+            ( { state
                 | serverUrl = url
-            }
-                |> withNoCmd
+              }
+            , Cmd.none
+            )
 
         Connect ->
-            { state
-                | loadable = Loaded initGameState
-            }
-                |> withNoCmd
+            let
+                ( gs, cmd ) =
+                    initGameState
+            in
+            ( { state
+                | loadable = Loaded gs
+              }
+            , cmd
+            )
 
         LoadResources rMsg ->
-            { state
-                | resources = Resources.update rMsg state.resources
-            }
-                |> withNoCmd
+            updateGameState (updateResources rMsg) state
 
         PressKeys kMsg ->
-            { state
-                | keys = Keyboard.update kMsg state.keys
-            }
-                |> withNoCmd
+            updateGameState (updateKeys kMsg) state
 
         ResizeWindow x y ->
-            { state
+            ( { state
                 | windowSize = ( x, y )
-            }
-                |> withNoCmd
+              }
+            , Cmd.none
+            )
 
         Tick dt ->
-            { state
-                | time = state.time + dt
-                , loadable =
-                    state.loadable
-                        |> mapLoadable (mapCamera (moveCamera state.keys dt))
-            }
-                |> withNoCmd
+            updateGameState (updateOnTick dt state.windowSize) state
 
 
-withNoCmd : a -> ( a, Cmd Msg )
-withNoCmd x =
-    ( x, Cmd.none )
+updateGameState : (GameState -> ( GameState, Cmd Msg )) -> State -> ( State, Cmd Msg )
+updateGameState f state =
+    case state.loadable of
+        Loaded gs ->
+            let
+                ( newGS, cmd ) =
+                    f gs
+            in
+            ( { state | loadable = Loaded newGS }
+            , cmd
+            )
+
+        _ ->
+            ( state, Cmd.none )
 
 
-mapLoadable : (a -> b) -> Loadable a -> Loadable b
-mapLoadable f loadable =
-    case loadable of
-        NotStarted ->
-            NotStarted
-
-        Loading ->
-            Loading
-
-        Error e ->
-            Error e
-
-        Loaded a ->
-            Loaded (f a)
+updateResources : Resources.Msg -> GameState -> ( GameState, Cmd Msg )
+updateResources rMsg gs =
+    ( { gs
+        | resources = Resources.update rMsg gs.resources
+      }
+    , Cmd.none
+    )
 
 
-mapCamera : (Camera -> Camera) -> GameState -> GameState
-mapCamera f gs =
+updateKeys : Keyboard.Msg -> GameState -> ( GameState, Cmd Msg )
+updateKeys kMsg gs =
+    ( { gs
+        | keys = Keyboard.update kMsg gs.keys
+      }
+    , Cmd.none
+    )
+
+
+updateOnTick : Float -> ( Int, Int ) -> GameState -> ( GameState, Cmd Msg )
+updateOnTick dt viewportSize gs =
+    let
+        arrows =
+            Keyboard.Arrows.arrows gs.keys
+
+        v =
+            -- units per second
+            8
+
+        cameraMove : Maybe ( Float, Float, Float )
+        cameraMove =
+            if arrows.x == 0 && arrows.y == 0 then
+                Nothing
+
+            else
+                Just
+                    ( toFloat arrows.x * v * dt / 1000
+                    , toFloat arrows.y * v * dt / 1000
+                    , 0
+                    )
+    in
+    case cameraMove of
+        Just ( dx, dy, _ ) ->
+            gs
+                |> updateTime dt
+                |> updateCamera (Camera.moveBy ( dx, dy ))
+                |> pruneRenderables viewportSize
+                |> (\g -> ( g, Cmd.none ))
+
+        Nothing ->
+            ( gs |> updateTime dt, Cmd.none )
+
+
+updateTime : Float -> GameState -> GameState
+updateTime dt gs =
+    { gs
+        | time = gs.time + dt
+    }
+
+
+updateCamera : (Camera -> Camera) -> GameState -> GameState
+updateCamera f gs =
     { gs
         | camera = f gs.camera
     }
 
 
-moveCamera : List Keyboard.Key -> Float -> Camera -> Camera
-moveCamera keys dt camera =
+pruneRenderables : ( Int, Int ) -> GameState -> GameState
+pruneRenderables viewportSize gs =
     let
-        arrows =
-            Keyboard.Arrows.arrows keys
+        center =
+            gs.camera |> Camera.getPosition
 
-        v =
-            -- 1 unit per second
-            3
+        size =
+            gs.camera
+                |> Camera.getViewSize (viewportSize |> Tuple.mapBoth toFloat toFloat)
 
-        dx =
-            toFloat arrows.x * v * dt / 1000
-
-        dy =
-            toFloat arrows.y * v * dt / 1000
+        ( regionMinCorner, regionMaxCorner ) =
+            regionOfInterest center size
     in
-    Camera.moveBy ( dx, dy ) camera
+    { gs
+      -- TODO: Prune cells.
+        | cells = gs.cells |> List.filter (isCellInRegion regionMinCorner regionMaxCorner)
+    }
+
+
+{-| Get the region (in game coordinates) for which the client should track cells
+and agents
+-}
+regionOfInterest : ( Float, Float ) -> ( Float, Float ) -> ( ( Float, Float ), ( Float, Float ) )
+regionOfInterest ( camCenterX, camCenterY ) ( camSizeX, camSizeY ) =
+    let
+        buffer =
+            2
+    in
+    ( ( camCenterX - camSizeX / 2 - buffer
+      , camCenterY - camSizeY / 2 - buffer
+      )
+    , ( camCenterX + camSizeX / 2 + buffer
+      , camCenterY + camSizeY / 2 + buffer
+      )
+    )
+
+
+isCellInRegion : ( Float, Float ) -> ( Float, Float ) -> Cell -> Bool
+isCellInRegion ( minX, minY ) ( maxX, maxY ) cell =
+    let
+        ( posX, posY ) =
+            cell.pos |> Tuple.mapBoth toFloat toFloat
+    in
+    (posX <= maxX)
+        && (posY <= maxY)
+        && -- Add cell width, because if edge of cell is touching region it should be included.
+           (posX + 1 >= minX)
+        && (posY + 1 >= minY)
 
 
 
@@ -212,7 +302,7 @@ view : State -> Html Msg
 view state =
     div [ class "page" ]
         [ topToolbarView state.serverUrl
-        , paneView state.time state.windowSize state.resources state.loadable
+        , paneView state.windowSize state.loadable
         , bottomToolbarView
         ]
 
@@ -230,8 +320,8 @@ bottomToolbarView =
     div [ class "bottom-toolbar" ] []
 
 
-paneView : Float -> ( Int, Int ) -> Resources -> Loadable GameState -> Html Msg
-paneView time windowSize resources loadable =
+paneView : ( Int, Int ) -> Loadable GameState -> Html Msg
+paneView windowSize loadable =
     let
         content =
             case loadable of
@@ -245,7 +335,7 @@ paneView time windowSize resources loadable =
                     statusMessageView ("Error occured: " ++ e)
 
                 Loaded gs ->
-                    gameView time windowSize gs.camera resources gs.cells gs.agents
+                    gameView windowSize gs
     in
     div [ class "pane" ] [ content ]
 
@@ -255,14 +345,14 @@ statusMessageView msg =
     div [ class "status-message" ] [ text msg ]
 
 
-gameView : Float -> ( Int, Int ) -> Camera -> Resources -> List Cell -> List Agent -> Html Msg
-gameView time windowSize camera resources cells _ =
+gameView : ( Int, Int ) -> GameState -> Html Msg
+gameView windowSize gs =
     Game.render
-        { time = time / 1000
+        { time = gs.time / 1000
         , size = windowSize
-        , camera = camera
+        , camera = gs.camera
         }
-        (renderCells resources cells)
+        (renderCells gs.resources gs.cells)
 
 
 
@@ -308,9 +398,9 @@ cellSprite resources cell =
         { texture = Resources.getTexture texture resources
         , position =
             ( Tuple.first cell.pos |> toFloat
-            , Tuple.second cell.pos * -1 |> toFloat
+            , Tuple.second cell.pos * 1 |> toFloat
             )
-        , size = ( 1, -1 )
+        , size = ( 1, 1 )
         }
 
 
