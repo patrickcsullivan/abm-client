@@ -29,6 +29,10 @@ main =
         }
 
 
+
+-- MODEL
+
+
 type alias State =
     { time : Float -- time in ms
     , windowSize : ( Int, Int )
@@ -87,6 +91,10 @@ init windowSize =
     )
 
 
+
+-- UPDATE / MESSAGE
+
+
 type Msg
     = ChangeServerUrl String
     | Connect
@@ -109,7 +117,6 @@ update msg state =
             { state
                 | loadable = Loaded testGameState
             }
-                |> Debug.log "State"
                 |> withNoCmd
 
         LoadResources rMsg ->
@@ -133,6 +140,9 @@ update msg state =
         Tick dt ->
             { state
                 | time = state.time + dt
+                , loadable =
+                    state.loadable
+                        |> mapLoadable (mapCamera (moveCamera state.keys dt))
             }
                 |> withNoCmd
 
@@ -140,6 +150,52 @@ update msg state =
 withNoCmd : a -> ( a, Cmd Msg )
 withNoCmd x =
     ( x, Cmd.none )
+
+
+mapLoadable : (a -> b) -> Loadable a -> Loadable b
+mapLoadable f loadable =
+    case loadable of
+        NotStarted ->
+            NotStarted
+
+        Loading ->
+            Loading
+
+        Error e ->
+            Error e
+
+        Loaded a ->
+            Loaded (f a)
+
+
+mapCamera : (Camera -> Camera) -> GameState -> GameState
+mapCamera f gs =
+    { gs
+        | camera = f gs.camera
+    }
+
+
+moveCamera : List Keyboard.Key -> Float -> Camera -> Camera
+moveCamera keys dt camera =
+    let
+        arrows =
+            Keyboard.Arrows.arrows keys
+
+        v =
+            -- 1 unit per second
+            1
+
+        dx =
+            toFloat arrows.x * v * dt / 1000
+
+        dy =
+            toFloat arrows.y * v * dt / 1000
+    in
+    Camera.moveBy ( dx, dy ) camera
+
+
+
+-- VIEW
 
 
 view : State -> Html Msg
