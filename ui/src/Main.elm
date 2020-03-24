@@ -9,8 +9,10 @@ import Game.TwoD.Render as Render exposing (Renderable)
 import Html exposing (Html, a, div, input, text)
 import Html.Attributes exposing (class, placeholder, value)
 import Html.Events exposing (onClick, onInput)
+import Json.Encode as Encode
 import Keyboard
 import Keyboard.Arrows
+import Port
 
 
 main : Program ( Int, Int ) State Msg
@@ -25,6 +27,7 @@ main =
                     [ Browser.Events.onResize ResizeWindow
                     , Browser.Events.onAnimationFrameDelta Tick
                     , Sub.map PressKeys Keyboard.subscriptions
+                    , Port.onConnectionOpened ConnectionOpened NoOp
                     ]
         }
 
@@ -88,16 +91,19 @@ init windowSize =
     )
 
 
-initGameState : ( GameState, Cmd Msg )
-initGameState =
+initGameState : ( Int, Int ) -> ( GameState, Cmd Msg )
+initGameState ( mapWidth, mapHeight ) =
     ( { time = 0
       , keys = []
       , resources = Resources.init
-      , mapWidth = 64
-      , mapHeight = 64
-      , cells = testCells
+      , mapWidth = mapWidth
+      , mapHeight = mapHeight
+      , cells = testCells ( mapWidth, mapHeight )
       , agents = testAgents
-      , camera = Camera.custom (\( w, h ) -> ( w / 75, h / 75 )) ( 32, 32 )
+      , camera =
+            Camera.custom
+                (\( w, h ) -> ( w / 75, h / 75 ))
+                ( toFloat mapWidth / 2, toFloat mapHeight / 2 )
       }
     , Cmd.map LoadResources
         (Resources.loadTextures
@@ -117,9 +123,11 @@ initGameState =
 
 type Msg
     = ChangeServerUrl String
-    | Connect
+    | ClickConnect
+    | ConnectionOpened ( Int, Int )
     | LoadResources Resources.Msg
     | PressKeys Keyboard.Msg
+    | NoOp
     | ResizeWindow Int Int
     | Tick Float
 
@@ -134,10 +142,17 @@ update msg state =
             , Cmd.none
             )
 
-        Connect ->
+        ClickConnect ->
+            ( { state
+                | loadable = Loading
+              }
+            , Port.connect state.serverUrl
+            )
+
+        ConnectionOpened mapSize ->
             let
                 ( gs, cmd ) =
-                    initGameState
+                    initGameState mapSize
             in
             ( { state
                 | loadable = Loaded gs
@@ -147,6 +162,9 @@ update msg state =
 
         LoadResources rMsg ->
             updateGameState (updateResources rMsg) state
+
+        NoOp ->
+            ( state, Cmd.none )
 
         PressKeys kMsg ->
             updateGameState (updateKeys kMsg) state
@@ -311,7 +329,7 @@ topToolbarView : String -> Html Msg
 topToolbarView serverUrl =
     div [ class "top-toolbar" ]
         [ input [ class "server-input", placeholder "Server URL", value serverUrl, onInput ChangeServerUrl ] []
-        , a [ class "connect-button", onClick Connect ] [ text "Connect" ]
+        , a [ class "connect-button", onClick ClickConnect ] [ text "Connect" ]
         ]
 
 
@@ -408,9 +426,9 @@ cellSprite resources cell =
 -- TEST DATA
 
 
-testCells : List Cell
-testCells =
-    posRange ( 0, 0 ) ( 64, 64 )
+testCells : ( Int, Int ) -> List Cell
+testCells mapSize =
+    posRange ( 0, 0 ) mapSize
         |> List.map
             (\p ->
                 { pos = p

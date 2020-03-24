@@ -21,6 +21,12 @@
         node: document.getElementById('elm-node'),
         flags: [window.innerWidth, window.innerHeight]
     });
+    app.ports.connectPort.subscribe(function (url) {
+        setTimeout(function () {
+            console.log('connected to URL', url);
+            app.ports.connectionOpenedPort.send({ 'x': 32, 'y': 32 })
+        }, 5000);
+    });
 </script>
 
 </html>
