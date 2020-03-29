@@ -1,5 +1,6 @@
 port module Port exposing (connect, onConnectionOpened, onSimUpdated, registerInterest)
 
+import BoundingBox exposing (BoundingBox)
 import Json.Decode as D
 import Json.Encode as E
 import Maybe.Extra as Maybe
@@ -18,37 +19,26 @@ port connectionOpenedPort : (E.Value -> msg) -> Sub msg
 port simUpdatedPort : (E.Value -> msg) -> Sub msg
 
 
-{-| Attempt to connect to the server.
+{-| Attempt to connect to a server at the given url.
 -}
 connect : String -> Cmd msg
-connect url =
-    connectPort (E.string url)
+connect =
+    E.string >> connectPort
 
 
 {-| Register interest in a region of the map.
 -}
-registerInterest : Float -> Float -> Float -> Float -> Cmd msg
-registerInterest minX maxX minY maxY =
-    [ ( "minX", E.float minX )
-    , ( "maxX", E.float maxX )
-    , ( "minY", E.float minY )
-    , ( "maxY", E.float maxY )
-    ]
-        |> E.object
-        |> registerInterestPort
+registerInterest : BoundingBox -> Cmd msg
+registerInterest =
+    BoundingBox.encode >> registerInterestPort
 
 
 {-| Creates message when a port communicates that a connection to the server has
-been opened and provides map size.
+been opened.
 -}
-onConnectionOpened : (( Int, Int ) -> msg) -> msg -> Sub msg
-onConnectionOpened onDecodeSuccess onDecodeFail =
-    connectionOpenedPort
-        (D.decodeValue mapSizeDecoder
-            >> Result.toMaybe
-            >> Maybe.map onDecodeSuccess
-            >> Maybe.withDefault onDecodeFail
-        )
+onConnectionOpened : msg -> Sub msg
+onConnectionOpened msg =
+    connectionOpenedPort (\_ -> msg)
 
 
 {-| Creates message when a port communicates a list of simulation updates.
@@ -65,10 +55,3 @@ onSimUpdated onDecodeSuccess onDecodeFail =
             >> Maybe.map (Maybe.values >> onDecodeSuccess)
             >> Maybe.withDefault onDecodeFail
         )
-
-
-mapSizeDecoder : D.Decoder ( Int, Int )
-mapSizeDecoder =
-    D.map2 (\x y -> ( x, y ))
-        (D.field "x" D.int)
-        (D.field "y" D.int)

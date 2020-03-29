@@ -1,6 +1,7 @@
 module Main exposing (Msg(..), main, update, view)
 
 import Agent exposing (Agent)
+import BoundingBox exposing (BoundingBox)
 import Browser
 import Browser.Events exposing (onResize)
 import Cell exposing (Cell)
@@ -20,7 +21,7 @@ import SimUpdate exposing (SimUpdate(..))
 main : Program ( Int, Int ) State Msg
 main =
     Browser.element
-        { init = \windowSize -> init windowSize
+        { init = \viewportSize -> init viewportSize
         , update = update
         , view = view
         , subscriptions =
@@ -29,7 +30,7 @@ main =
                     [ Browser.Events.onResize ResizeWindow
                     , Browser.Events.onAnimationFrameDelta Tick
                     , Sub.map PressKeys Keyboard.subscriptions
-                    , Port.onConnectionOpened ConnectionOpen NoOp
+                    , Port.onConnectionOpened ConnectionOpen
                     , Port.onSimUpdated UpdateSim NoOp
                     ]
         }
@@ -40,7 +41,7 @@ main =
 
 
 type alias State =
-    { windowSize : ( Int, Int )
+    { viewportSize : ( Int, Int )
     , serverUrl : String
     , loadable : Loadable GameState
     }
@@ -57,8 +58,6 @@ type alias GameState =
     { time : Float -- time in ms
     , keys : List Keyboard.Key -- keys currently pressed
     , resources : Resources
-    , mapWidth : Int
-    , mapHeight : Int
     , cells : List Cell
     , agents : List Agent
     , camera : Camera
@@ -66,9 +65,9 @@ type alias GameState =
 
 
 init : ( Int, Int ) -> ( State, Cmd Msg )
-init windowSize =
+init viewportSize =
     ( { serverUrl = ""
-      , windowSize = windowSize
+      , viewportSize = viewportSize
       , loadable = NotStarted
       }
     , Cmd.map LoadResources
@@ -84,28 +83,35 @@ init windowSize =
 
 
 initGameState : ( Int, Int ) -> ( GameState, Cmd Msg )
-initGameState ( mapWidth, mapHeight ) =
+initGameState viewportSize =
+    let
+        camera =
+            Camera.custom
+                (\( w, h ) -> ( w / 75, h / 75 ))
+                ( 0, 0 )
+
+        interest =
+            regionOfInterest viewportSize camera
+    in
     ( { time = 0
       , keys = []
       , resources = Resources.init
-      , mapWidth = mapWidth
-      , mapHeight = mapHeight
-      , cells = testCells ( mapWidth, mapHeight )
-      , agents = testAgents
-      , camera =
-            Camera.custom
-                (\( w, h ) -> ( w / 75, h / 75 ))
-                ( toFloat mapWidth / 2, toFloat mapHeight / 2 )
+      , cells = []
+      , agents = []
+      , camera = camera
       }
-    , Cmd.map LoadResources
-        (Resources.loadTextures
-            [ "resources/grass0.png"
-            , "resources/grass1.png"
-            , "resources/grass2.png"
-            , "resources/grass3.png"
-            , "resources/grass4.png"
-            ]
-        )
+    , Cmd.batch
+        [ Cmd.map LoadResources
+            (Resources.loadTextures
+                [ "resources/grass0.png"
+                , "resources/grass1.png"
+                , "resources/grass2.png"
+                , "resources/grass3.png"
+                , "resources/grass4.png"
+                ]
+            )
+        , Port.registerInterest interest
+        ]
     )
 
 
@@ -116,7 +122,7 @@ initGameState ( mapWidth, mapHeight ) =
 type Msg
     = ChangeServerUrl String
     | ClickConnect
-    | ConnectionOpen ( Int, Int )
+    | ConnectionOpen
     | LoadResources Resources.Msg
     | PressKeys Keyboard.Msg
     | NoOp
@@ -142,10 +148,10 @@ update msg state =
             , Port.connect state.serverUrl
             )
 
-        ConnectionOpen mapSize ->
+        ConnectionOpen ->
             let
                 ( gs, cmd ) =
-                    initGameState mapSize
+                    initGameState state.viewportSize
             in
             ( { state
                 | loadable = Loaded gs
@@ -164,13 +170,13 @@ update msg state =
 
         ResizeWindow x y ->
             ( { state
-                | windowSize = ( x, y )
+                | viewportSize = ( x, y )
               }
             , Cmd.none
             )
 
         Tick dt ->
-            updateGameState (updateOnTick dt state.windowSize) state
+            updateGameState (updateOnTick dt state.viewportSize) state
 
         UpdateSim _ ->
             ( state, Cmd.none )
@@ -258,54 +264,58 @@ updateCamera f gs =
     }
 
 
+{-| Removes agents and cells that are outside the region of interest, the space
+visible to the camera plus some extra space around the camera
+-}
 pruneRenderables : ( Int, Int ) -> GameState -> GameState
 pruneRenderables viewportSize gs =
     let
-        center =
-            gs.camera |> Camera.getPosition
-
-        size =
-            gs.camera
-                |> Camera.getViewSize (viewportSize |> Tuple.mapBoth toFloat toFloat)
-
-        ( regionMinCorner, regionMaxCorner ) =
-            regionOfInterest center size
+        region =
+            regionOfInterest viewportSize gs.camera
     in
     { gs
-      -- TODO: Prune cells.
-        | cells = gs.cells |> List.filter (isCellInRegion regionMinCorner regionMaxCorner)
+      -- TODO: Prune agents.
+        | cells = gs.cells |> List.filter (isCellIn region)
     }
 
 
-{-| Get the region (in game coordinates) for which the client should track cells
-and agents
+{-| Gets the region (in game coordinates) for which the client should track
+cells and agents.
 -}
-regionOfInterest : ( Float, Float ) -> ( Float, Float ) -> ( ( Float, Float ), ( Float, Float ) )
-regionOfInterest ( camCenterX, camCenterY ) ( camSizeX, camSizeY ) =
+regionOfInterest : ( Int, Int ) -> Camera -> BoundingBox
+regionOfInterest viewportSize camera =
     let
-        buffer =
+        ( camCenterX, camCenterY ) =
+            camera |> Camera.getPosition
+
+        ( camSizeX, camSizeY ) =
+            camera
+                |> Camera.getViewSize (viewportSize |> Tuple.mapBoth toFloat toFloat)
+
+        -- Extra space around the camera that is also of interest
+        extra =
             2
     in
-    ( ( camCenterX - camSizeX / 2 - buffer
-      , camCenterY - camSizeY / 2 - buffer
-      )
-    , ( camCenterX + camSizeX / 2 + buffer
-      , camCenterY + camSizeY / 2 + buffer
-      )
-    )
+    { minX = camCenterX - camSizeX / 2 - extra
+    , maxX = camCenterX + camSizeX / 2 + extra
+    , minY = camCenterY - camSizeY / 2 - extra
+    , maxY = camCenterY + camSizeY / 2 + extra
+    }
 
 
-isCellInRegion : ( Float, Float ) -> ( Float, Float ) -> Cell -> Bool
-isCellInRegion ( minX, minY ) ( maxX, maxY ) cell =
+{-| Checks if cell is within the region defined by the bounding box.
+-}
+isCellIn : BoundingBox -> Cell -> Bool
+isCellIn box cell =
     let
         ( posX, posY ) =
             cell.pos |> Tuple.mapBoth toFloat toFloat
     in
-    (posX <= maxX)
-        && (posY <= maxY)
+    (posX <= box.maxX)
+        && (posY <= box.maxY)
         && -- Add cell width, because if edge of cell is touching region it should be included.
-           (posX + 1 >= minX)
-        && (posY + 1 >= minY)
+           (posX + 1 >= box.minX)
+        && (posY + 1 >= box.minY)
 
 
 
@@ -316,7 +326,7 @@ view : State -> Html Msg
 view state =
     div [ class "page" ]
         [ topToolbarView state.serverUrl
-        , paneView state.windowSize state.loadable
+        , paneView state.viewportSize state.loadable
         , bottomToolbarView
         ]
 
@@ -335,7 +345,7 @@ bottomToolbarView =
 
 
 paneView : ( Int, Int ) -> Loadable GameState -> Html Msg
-paneView windowSize loadable =
+paneView viewportSize loadable =
     let
         content =
             case loadable of
@@ -349,7 +359,7 @@ paneView windowSize loadable =
                     statusMessageView ("Error occured: " ++ e)
 
                 Loaded gs ->
-                    gameView windowSize gs
+                    gameView viewportSize gs
     in
     div [ class "pane" ] [ content ]
 
@@ -360,10 +370,10 @@ statusMessageView msg =
 
 
 gameView : ( Int, Int ) -> GameState -> Html Msg
-gameView windowSize gs =
+gameView viewportSize gs =
     Game.render
         { time = gs.time / 1000
-        , size = windowSize
+        , size = viewportSize
         , camera = gs.camera
         }
         (renderCells gs.resources gs.cells)
@@ -416,41 +426,3 @@ cellSprite resources cell =
             )
         , size = ( 1, 1 )
         }
-
-
-
--- TEST DATA
-
-
-testCells : ( Int, Int ) -> List Cell
-testCells mapSize =
-    posRange ( 0, 0 ) mapSize
-        |> List.map
-            (\p ->
-                { pos = p
-                , grass = modBy 5 (Tuple.first p + Tuple.second p)
-                }
-            )
-
-
-testAgents : List Agent
-testAgents =
-    posRange ( 5, 3 ) ( 12, 8 )
-        |> List.map
-            (\p ->
-                { pos =
-                    ( (Tuple.first p |> toFloat) + 0.5
-                    , (Tuple.second p |> toFloat) + 0.5
-                    )
-                }
-            )
-
-
-posRange : ( Int, Int ) -> ( Int, Int ) -> List ( Int, Int )
-posRange ( xi, yi ) ( xf, yf ) =
-    let
-        xs =
-            List.range xi xf
-    in
-    List.range yi yf
-        |> List.concatMap (\y -> List.map (\x -> ( x, y )) xs)
