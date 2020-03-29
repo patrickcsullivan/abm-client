@@ -1,7 +1,9 @@
-port module Port exposing (connect, onConnectionOpened, registerInterest)
+port module Port exposing (connect, onConnectionOpened, onSimUpdated, registerInterest)
 
 import Json.Decode as D
 import Json.Encode as E
+import Maybe.Extra as Maybe
+import SimUpdate exposing (SimUpdate(..))
 
 
 port connectPort : E.Value -> Cmd msg
@@ -11,6 +13,9 @@ port registerInterestPort : E.Value -> Cmd msg
 
 
 port connectionOpenedPort : (E.Value -> msg) -> Sub msg
+
+
+port simUpdatedPort : (E.Value -> msg) -> Sub msg
 
 
 {-| Attempt to connect to the server.
@@ -34,15 +39,31 @@ registerInterest minX maxX minY maxY =
 
 
 {-| Creates message when a port communicates that a connection to the server has
-been opened.
+been opened and provides map size.
 -}
 onConnectionOpened : (( Int, Int ) -> msg) -> msg -> Sub msg
-onConnectionOpened withMapSize withoutMapSize =
+onConnectionOpened onDecodeSuccess onDecodeFail =
     connectionOpenedPort
         (D.decodeValue mapSizeDecoder
             >> Result.toMaybe
-            >> Maybe.map withMapSize
-            >> Maybe.withDefault withoutMapSize
+            >> Maybe.map onDecodeSuccess
+            >> Maybe.withDefault onDecodeFail
+        )
+
+
+{-| Creates message when a port communicates a list of simulation updates.
+-}
+onSimUpdated : (List SimUpdate -> msg) -> msg -> Sub msg
+onSimUpdated onDecodeSuccess onDecodeFail =
+    let
+        decoder =
+            D.list (D.maybe SimUpdate.decoder)
+    in
+    simUpdatedPort
+        (D.decodeValue decoder
+            >> Result.toMaybe
+            >> Maybe.map (Maybe.values >> onDecodeSuccess)
+            >> Maybe.withDefault onDecodeFail
         )
 
 

@@ -1,7 +1,9 @@
 module Main exposing (Msg(..), main, update, view)
 
+import Agent exposing (Agent)
 import Browser
 import Browser.Events exposing (onResize)
+import Cell exposing (Cell)
 import Game.Resources as Resources exposing (Resources)
 import Game.TwoD as Game
 import Game.TwoD.Camera as Camera exposing (Camera)
@@ -9,10 +11,10 @@ import Game.TwoD.Render as Render exposing (Renderable)
 import Html exposing (Html, a, div, input, text)
 import Html.Attributes exposing (class, placeholder, value)
 import Html.Events exposing (onClick, onInput)
-import Json.Encode as Encode
 import Keyboard
 import Keyboard.Arrows
 import Port
+import SimUpdate exposing (SimUpdate(..))
 
 
 main : Program ( Int, Int ) State Msg
@@ -27,7 +29,8 @@ main =
                     [ Browser.Events.onResize ResizeWindow
                     , Browser.Events.onAnimationFrameDelta Tick
                     , Sub.map PressKeys Keyboard.subscriptions
-                    , Port.onConnectionOpened ConnectionOpened NoOp
+                    , Port.onConnectionOpened ConnectionOpen NoOp
+                    , Port.onSimUpdated UpdateSim NoOp
                     ]
         }
 
@@ -59,17 +62,6 @@ type alias GameState =
     , cells : List Cell
     , agents : List Agent
     , camera : Camera
-    }
-
-
-type alias Cell =
-    { pos : ( Int, Int )
-    , grass : Int
-    }
-
-
-type alias Agent =
-    { pos : ( Float, Float )
     }
 
 
@@ -124,12 +116,13 @@ initGameState ( mapWidth, mapHeight ) =
 type Msg
     = ChangeServerUrl String
     | ClickConnect
-    | ConnectionOpened ( Int, Int )
+    | ConnectionOpen ( Int, Int )
     | LoadResources Resources.Msg
     | PressKeys Keyboard.Msg
     | NoOp
     | ResizeWindow Int Int
     | Tick Float
+    | UpdateSim (List SimUpdate)
 
 
 update : Msg -> State -> ( State, Cmd Msg )
@@ -149,7 +142,7 @@ update msg state =
             , Port.connect state.serverUrl
             )
 
-        ConnectionOpened mapSize ->
+        ConnectionOpen mapSize ->
             let
                 ( gs, cmd ) =
                     initGameState mapSize
@@ -178,6 +171,9 @@ update msg state =
 
         Tick dt ->
             updateGameState (updateOnTick dt state.windowSize) state
+
+        UpdateSim _ ->
+            ( state, Cmd.none )
 
 
 updateGameState : (GameState -> ( GameState, Cmd Msg )) -> State -> ( State, Cmd Msg )
