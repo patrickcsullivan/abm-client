@@ -17,19 +17,35 @@
 
 <div id="elm-node"></div>
 <script>
+    var socket = null;
+
     var app = Elm.Main.init({
         node: document.getElementById('elm-node'),
         flags: [window.innerWidth, window.innerHeight]
     });
 
     app.ports.connectPort.subscribe(function (url) {
-        // DO SOMETHING
-        setTimeout(function () {
-            console.log('connected to URL', url);
-            app.ports.connectionOpenedPort.send({ 'x': 32, 'y': 32 })
-        }, 5000);
+        socket = new WebSocket('ws://' + url);
+
+        socket.onopen = function (_) {
+            console.log('CONNECTION OPENED');
+            app.ports.connectionOpenedPort.send();
+        };
+
+        socket.onmessage = function (event) {
+            console.log('ON MESSAGE', event);
+            let msg = JSON.parse(event.data);
+            app.ports.simUpdatedPort.send(msg);
+        }
     });
 
+    app.ports.registerInterestPort.subscribe(function (obj) {
+        if (socket) {
+            console.log('REGISTER INTEREST', obj);
+            let msg = JSON.stringify(obj);
+            app.ports.connectionOpenedPort.send(msg);
+        }
+    });
 
 </script>
 

@@ -149,6 +149,8 @@ update msg state =
             )
 
         ConnectionOpen ->
+            -- TODO: Why is this message getting passed so much?
+            -- TODO: Only update gamestate if it is unloaded.
             let
                 ( gs, cmd ) =
                     initGameState state.viewportSize
