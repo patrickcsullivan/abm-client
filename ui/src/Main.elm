@@ -14,7 +14,9 @@ import Html.Attributes exposing (class, placeholder, value)
 import Html.Events exposing (onClick, onInput)
 import Keyboard
 import Keyboard.Arrows
-import Port
+import Server.FromClient exposing (FromClient(..))
+import Server.Port
+import Server.ToClient exposing (ToClient)
 import SimUpdate exposing (SimUpdate(..))
 
 
@@ -30,8 +32,8 @@ main =
                     [ Browser.Events.onResize ResizeWindow
                     , Browser.Events.onAnimationFrameDelta Tick
                     , Sub.map PressKeys Keyboard.subscriptions
-                    , Port.onConnectionOpened ConnectionOpen
-                    , Port.onSimUpdated UpdateSim NoOp
+                    , Server.Port.onConnectionOpened ConnectionOpen
+                    , Server.Port.onReceiveFromServer ReceiveMsgFromServer NoOp
                     ]
         }
 
@@ -66,7 +68,7 @@ type alias GameState =
 
 init : ( Int, Int ) -> ( State, Cmd Msg )
 init viewportSize =
-    ( { serverUrl = ""
+    ( { serverUrl = "127.0.0.1:8888"
       , viewportSize = viewportSize
       , loadable = NotStarted
       }
@@ -110,7 +112,7 @@ initGameState viewportSize =
                 , "resources/grass4.png"
                 ]
             )
-        , Port.registerInterest interest
+        , Server.Port.sendToServer (RegisterInterest interest)
         ]
     )
 
@@ -128,7 +130,7 @@ type Msg
     | NoOp
     | ResizeWindow Int Int
     | Tick Float
-    | UpdateSim (List SimUpdate)
+    | ReceiveMsgFromServer ToClient
 
 
 update : Msg -> State -> ( State, Cmd Msg )
@@ -145,12 +147,10 @@ update msg state =
             ( { state
                 | loadable = Loading
               }
-            , Port.connect state.serverUrl
+            , Server.Port.connect state.serverUrl
             )
 
         ConnectionOpen ->
-            -- TODO: Why is this message getting passed so much?
-            -- TODO: Only update gamestate if it is unloaded.
             let
                 ( gs, cmd ) =
                     initGameState state.viewportSize
@@ -180,7 +180,11 @@ update msg state =
         Tick dt ->
             updateGameState (updateOnTick dt state.viewportSize) state
 
-        UpdateSim _ ->
+        ReceiveMsgFromServer rMsg ->
+            let
+                _ =
+                    rMsg |> Debug.log "ReceiveMsgFromServer"
+            in
             ( state, Cmd.none )
 
 

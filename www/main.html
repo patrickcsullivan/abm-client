@@ -24,28 +24,35 @@
         flags: [window.innerWidth, window.innerHeight]
     });
 
+    // console.log('connectionOpenedPort FROM js')
+    // app.ports.connectionOpenedPort.send("hello");
+
     app.ports.connectPort.subscribe(function (url) {
         socket = new WebSocket('ws://' + url);
 
-        socket.onopen = function (_) {
-            console.log('CONNECTION OPENED');
-            app.ports.connectionOpenedPort.send();
+        socket.onopen = function (event) {
+            console.log('CONNECTION OPENED', event);
+            app.ports.connectionOpenedPort.send(event);
         };
 
         socket.onmessage = function (event) {
             console.log('ON MESSAGE', event);
             let msg = JSON.parse(event.data);
-            app.ports.simUpdatedPort.send(msg);
+            app.ports.recieveFromServerPort.send(msg);
         }
     });
 
-    app.ports.registerInterestPort.subscribe(function (obj) {
+    app.ports.sendToServerPort.subscribe(function (obj) {
         if (socket) {
-            console.log('REGISTER INTEREST', obj);
             let msg = JSON.stringify(obj);
-            app.ports.connectionOpenedPort.send(msg);
+            console.log('SEND TO SERVER', msg);
+            socket.send(msg);
         }
     });
+
+    let sendPortOpeneMsg = function () {
+        console.log('SENDING MSG TO CONNECTION-OPENED-PORT');
+    }
 
 </script>
 
