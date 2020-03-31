@@ -181,6 +181,7 @@ update msg state =
             updateGameState (updateOnTick dt state.viewportSize) state
 
         ReceiveMsgFromServer rMsg ->
+            -- TODO: Update, insert, and prune cells.
             let
                 _ =
                     rMsg |> Debug.log "ReceiveMsgFromServer"
@@ -246,43 +247,41 @@ updateOnTick dt viewportSize gs =
     in
     case cameraMove of
         Just ( dx, dy, _ ) ->
-            gs
-                |> updateTime dt
-                |> updateCamera (Camera.moveBy ( dx, dy ))
-                |> pruneRenderables viewportSize
-                |> (\g -> ( g, Cmd.none ))
+            let
+                updatedTime =
+                    gs.time + dt
+
+                updatedCamera =
+                    Camera.moveBy ( dx, dy ) gs.camera
+
+                interest =
+                    regionOfInterest viewportSize updatedCamera
+
+                updatedCells =
+                    filterCellsInRegion interest gs.cells
+            in
+            ( { gs
+                | time = updatedTime
+                , camera = updatedCamera
+                , cells = updatedCells
+              }
+            , Server.Port.sendToServer (RegisterInterest interest)
+            )
 
         Nothing ->
-            ( gs |> updateTime dt, Cmd.none )
+            ( { gs
+                | time = gs.time + dt
+              }
+            , Cmd.none
+            )
 
 
-updateTime : Float -> GameState -> GameState
-updateTime dt gs =
-    { gs
-        | time = gs.time + dt
-    }
-
-
-updateCamera : (Camera -> Camera) -> GameState -> GameState
-updateCamera f gs =
-    { gs
-        | camera = f gs.camera
-    }
-
-
-{-| Removes agents and cells that are outside the region of interest, the space
-visible to the camera plus some extra space around the camera
+{-| Keep only cells that are partially or entirely within the given region in
+game coordinate.
 -}
-pruneRenderables : ( Int, Int ) -> GameState -> GameState
-pruneRenderables viewportSize gs =
-    let
-        region =
-            regionOfInterest viewportSize gs.camera
-    in
-    { gs
-      -- TODO: Prune agents.
-        | cells = gs.cells |> List.filter (isCellIn region)
-    }
+filterCellsInRegion : BoundingBox -> List Cell -> List Cell
+filterCellsInRegion region =
+    List.filter (isCellIn region)
 
 
 {-| Gets the region (in game coordinates) for which the client should track
