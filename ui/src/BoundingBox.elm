@@ -4,18 +4,18 @@ import Json.Encode as E
 
 
 type alias BoundingBox =
-    { minX : Float
-    , maxX : Float
-    , minY : Float
-    , maxY : Float
+    { xMin : Float
+    , xMax : Float
+    , yMin : Float
+    , yMax : Float
     }
 
 
 encode : BoundingBox -> E.Value
 encode box =
     E.object
-        [ ( "min_x", E.float box.minX )
-        , ( "max_x", E.float box.maxX )
-        , ( "min_y", E.float box.minY )
-        , ( "max_y", E.float box.maxY )
+        [ ( "x_min", E.float box.xMin )
+        , ( "x_max", E.float box.xMax )
+        , ( "y_min", E.float box.yMin )
+        , ( "y_max", E.float box.yMax )
         ]

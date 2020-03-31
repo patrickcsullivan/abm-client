@@ -1,10 +1,8 @@
 module Main exposing (Msg(..), main, update, view)
 
-import Agent exposing (Agent)
 import BoundingBox exposing (BoundingBox)
 import Browser
 import Browser.Events exposing (onResize)
-import Cell exposing (Cell)
 import Game.Resources as Resources exposing (Resources)
 import Game.TwoD as Game
 import Game.TwoD.Camera as Camera exposing (Camera)
@@ -17,7 +15,6 @@ import Keyboard.Arrows
 import Server.FromClient exposing (FromClient(..))
 import Server.Port
 import Server.ToClient exposing (ToClient)
-import SimUpdate exposing (SimUpdate(..))
 
 
 main : Program ( Int, Int ) State Msg
@@ -33,6 +30,7 @@ main =
                     , Browser.Events.onAnimationFrameDelta Tick
                     , Sub.map PressKeys Keyboard.subscriptions
                     , Server.Port.onConnectionOpened ConnectionOpen
+                    , Server.Port.onConnectionError ConnectionError
                     , Server.Port.onReceiveFromServer ReceiveMsgFromServer NoOp
                     ]
         }
@@ -52,7 +50,7 @@ type alias State =
 type Loadable a
     = NotStarted
     | Loading
-    | Error String
+    | Error (Maybe String)
     | Loaded a
 
 
@@ -63,6 +61,17 @@ type alias GameState =
     , cells : List Cell
     , agents : List Agent
     , camera : Camera
+    }
+
+
+type alias Agent =
+    { pos : ( Float, Float )
+    }
+
+
+type alias Cell =
+    { pos : ( Int, Int )
+    , grass : Int
     }
 
 
@@ -124,6 +133,7 @@ initGameState viewportSize =
 type Msg
     = ChangeServerUrl String
     | ClickConnect
+    | ConnectionError (Maybe String)
     | ConnectionOpen
     | LoadResources Resources.Msg
     | PressKeys Keyboard.Msg
@@ -148,6 +158,13 @@ update msg state =
                 | loadable = Loading
               }
             , Server.Port.connect state.serverUrl
+            )
+
+        ConnectionError maybeMsg ->
+            ( { state
+                | loadable = Error maybeMsg
+              }
+            , Cmd.none
             )
 
         ConnectionOpen ->
@@ -180,13 +197,8 @@ update msg state =
         Tick dt ->
             updateGameState (updateOnTick dt state.viewportSize) state
 
-        ReceiveMsgFromServer rMsg ->
-            -- TODO: Update, insert, and prune cells.
-            let
-                _ =
-                    rMsg |> Debug.log "ReceiveMsgFromServer"
-            in
-            ( state, Cmd.none )
+        ReceiveMsgFromServer sMsg ->
+            updateGameState (updateCells sMsg) state
 
 
 updateGameState : (GameState -> ( GameState, Cmd Msg )) -> State -> ( State, Cmd Msg )
@@ -218,6 +230,25 @@ updateKeys : Keyboard.Msg -> GameState -> ( GameState, Cmd Msg )
 updateKeys kMsg gs =
     ( { gs
         | keys = Keyboard.update kMsg gs.keys
+      }
+    , Cmd.none
+    )
+
+
+updateCells : ToClient -> GameState -> ( GameState, Cmd Msg )
+updateCells sMsg gs =
+    let
+        updatedCells =
+            sMsg.cellUpdates
+                |> List.map
+                    (\up ->
+                        { pos = ( up.x, up.y )
+                        , grass = up.grass
+                        }
+                    )
+    in
+    ( { gs
+        | cells = updatedCells
       }
     , Cmd.none
     )
@@ -301,10 +332,10 @@ regionOfInterest viewportSize camera =
         extra =
             2
     in
-    { minX = camCenterX - camSizeX / 2 - extra
-    , maxX = camCenterX + camSizeX / 2 + extra
-    , minY = camCenterY - camSizeY / 2 - extra
-    , maxY = camCenterY + camSizeY / 2 + extra
+    { xMin = camCenterX - camSizeX / 2 - extra
+    , xMax = camCenterX + camSizeX / 2 + extra
+    , yMin = camCenterY - camSizeY / 2 - extra
+    , yMax = camCenterY + camSizeY / 2 + extra
     }
 
 
@@ -316,11 +347,11 @@ isCellIn box cell =
         ( posX, posY ) =
             cell.pos |> Tuple.mapBoth toFloat toFloat
     in
-    (posX <= box.maxX)
-        && (posY <= box.maxY)
+    (posX <= box.xMax)
+        && (posY <= box.yMax)
         && -- Add cell width, because if edge of cell is touching region it should be included.
-           (posX + 1 >= box.minX)
-        && (posY + 1 >= box.minY)
+           (posX + 1 >= box.xMin)
+        && (posY + 1 >= box.yMin)
 
 
 
@@ -360,8 +391,17 @@ paneView viewportSize loadable =
                 Loading ->
                     statusMessageView "Connecting."
 
-                Error e ->
-                    statusMessageView ("Error occured: " ++ e)
+                Error maybeE ->
+                    let
+                        eMsg =
+                            case maybeE of
+                                Just e ->
+                                    "Error occured: " ++ e
+
+                                Nothing ->
+                                    "Error occured"
+                    in
+                    statusMessageView eMsg
 
                 Loaded gs ->
                     gameView viewportSize gs
@@ -382,20 +422,6 @@ gameView viewportSize gs =
         , camera = gs.camera
         }
         (renderCells gs.resources gs.cells)
-
-
-
--- render : Resources -> List Cell -> List Agent -> List Renderable
--- render resources _ _ =
---     [ Render.spriteWithOptions
---         { position = ( 0, 0, 0 )
---         , size = ( 10, 5 )
---         , texture = Resources.getTexture "resources/grass4.png" resources
---         , rotation = 0
---         , pivot = ( 0, 0 )
---         , tiling = ( 10, 5 )
---         }
---     ]
 
 
 renderCells : Resources -> List Cell -> List Renderable

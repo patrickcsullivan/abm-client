@@ -17,42 +17,53 @@
 
 <div id="elm-node"></div>
 <script>
-    var socket = null;
-
     var app = Elm.Main.init({
         node: document.getElementById('elm-node'),
         flags: [window.innerWidth, window.innerHeight]
     });
 
-    // console.log('connectionOpenedPort FROM js')
-    // app.ports.connectionOpenedPort.send("hello");
+    var socket = null;
+    var connected = false;
 
     app.ports.connectPort.subscribe(function (url) {
+        if (socket) {
+            // Only keep one socket open at a time, and don't send any port
+            // message about the socket closing if it is closed because a new
+            // socket is opened.
+            socket.onclose = function (_) { };
+            socket.close();
+            socket = null;
+            connected = false;
+        }
+
         socket = new WebSocket('ws://' + url);
 
         socket.onopen = function (event) {
-            console.log('CONNECTION OPENED', event);
             app.ports.connectionOpenedPort.send(event);
+            connected = true;
         };
 
         socket.onmessage = function (event) {
-            console.log('ON MESSAGE', event);
             let msg = JSON.parse(event.data);
             app.ports.recieveFromServerPort.send(msg);
+        }
+
+        socket.onclose = function (_) {
+            if (connected) {
+                app.ports.connectionErrorPort.send("Connection closed.");
+                connected = false;
+            } else {
+                app.ports.connectionErrorPort.send("Failed to connect.");
+            }
         }
     });
 
     app.ports.sendToServerPort.subscribe(function (obj) {
         if (socket) {
             let msg = JSON.stringify(obj);
-            console.log('SEND TO SERVER', msg);
             socket.send(msg);
         }
     });
-
-    let sendPortOpeneMsg = function () {
-        console.log('SENDING MSG TO CONNECTION-OPENED-PORT');
-    }
 
 </script>
 

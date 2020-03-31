@@ -21,8 +21,8 @@ encode msg =
 encodeBoundingBox : BoundingBox -> E.Value
 encodeBoundingBox box =
     E.object
-        [ ( "min_x", E.float box.minX )
-        , ( "max_x", E.float box.maxX )
-        , ( "min_y", E.float box.minY )
-        , ( "max_y", E.float box.maxY )
+        [ ( "x_min", E.float box.xMin )
+        , ( "x_max", E.float box.xMax )
+        , ( "y_min", E.float box.yMin )
+        , ( "y_max", E.float box.yMax )
         ]
