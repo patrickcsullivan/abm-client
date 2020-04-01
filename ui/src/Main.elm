@@ -198,7 +198,7 @@ update msg state =
             updateGameState (updateOnTick dt state.viewportSize) state
 
         ReceiveMsgFromServer sMsg ->
-            updateGameState (updateCells sMsg) state
+            updateGameState (updateCells sMsg state.viewportSize) state
 
 
 updateGameState : (GameState -> ( GameState, Cmd Msg )) -> State -> ( State, Cmd Msg )
@@ -235,9 +235,12 @@ updateKeys kMsg gs =
     )
 
 
-updateCells : ToClient -> GameState -> ( GameState, Cmd Msg )
-updateCells sMsg gs =
+updateCells : ToClient -> ( Int, Int ) -> GameState -> ( GameState, Cmd Msg )
+updateCells sMsg viewportSize gs =
     let
+        interest =
+            regionOfInterest viewportSize gs.camera
+
         updatedCells =
             sMsg.cellUpdates
                 |> List.map
@@ -246,6 +249,8 @@ updateCells sMsg gs =
                         , grass = up.grass
                         }
                     )
+                -- Filter cells in case server sent back uniteresting ones.
+                |> filterCellsInRegion interest
     in
     ( { gs
         | cells = updatedCells
