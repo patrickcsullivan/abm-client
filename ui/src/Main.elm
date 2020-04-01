@@ -77,7 +77,7 @@ type alias Cell =
 
 init : ( Int, Int ) -> ( State, Cmd Msg )
 init viewportSize =
-    ( { serverUrl = "127.0.0.1:54321"
+    ( { serverUrl = "ws://127.0.0.1:54321"
       , viewportSize = viewportSize
       , loadable = NotStarted
       }
