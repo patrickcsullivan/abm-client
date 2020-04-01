@@ -36,7 +36,13 @@
             connected = false;
         }
 
-        socket = new WebSocket('ws://' + url);
+        try {
+            socket = new WebSocket('ws://' + url);
+        } catch (error) {
+            console.log("Error", error);
+            app.ports.connectionErrorPort.send("Failed to connect.");
+            return;
+        }
 
         socket.onopen = function (event) {
             app.ports.connectionOpenedPort.send(event);
