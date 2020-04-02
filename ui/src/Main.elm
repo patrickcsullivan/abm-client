@@ -3,6 +3,7 @@ module Main exposing (Msg(..), main, update, view)
 import BoundingBox exposing (BoundingBox)
 import Browser
 import Browser.Events exposing (onResize)
+import Color
 import Game.Resources as Resources exposing (Resources)
 import Game.TwoD as Game
 import Game.TwoD.Camera as Camera exposing (Camera)
@@ -81,15 +82,7 @@ init viewportSize =
       , viewportSize = viewportSize
       , loadable = NotStarted
       }
-    , Cmd.map LoadResources
-        (Resources.loadTextures
-            [ "resources/grass0.png"
-            , "resources/grass1.png"
-            , "resources/grass2.png"
-            , "resources/grass3.png"
-            , "resources/grass4.png"
-            ]
-        )
+    , Cmd.none
     )
 
 
@@ -113,6 +106,7 @@ initGameState viewportSize =
       }
     , Cmd.batch
         [ Cmd.map LoadResources
+            -- TODO: Would be better to load this in init and save them in a PartiallyLoaded state.
             (Resources.loadTextures
                 [ "resources/grass0.png"
                 , "resources/grass1.png"
@@ -198,7 +192,7 @@ update msg state =
             updateGameState (updateOnTick dt state.viewportSize) state
 
         ReceiveMsgFromServer sMsg ->
-            updateGameState (updateCells sMsg state.viewportSize) state
+            updateGameState (applyServerUpdates sMsg state.viewportSize) state
 
 
 updateGameState : (GameState -> ( GameState, Cmd Msg )) -> State -> ( State, Cmd Msg )
@@ -235,8 +229,8 @@ updateKeys kMsg gs =
     )
 
 
-updateCells : ToClient -> ( Int, Int ) -> GameState -> ( GameState, Cmd Msg )
-updateCells sMsg viewportSize gs =
+applyServerUpdates : ToClient -> ( Int, Int ) -> GameState -> ( GameState, Cmd Msg )
+applyServerUpdates sMsg viewportSize gs =
     let
         interest =
             regionOfInterest viewportSize gs.camera
@@ -251,9 +245,14 @@ updateCells sMsg viewportSize gs =
                     )
                 -- Filter cells in case server sent back uniteresting ones.
                 |> filterCellsInRegion interest
+
+        updatedAgents =
+            List.concat [ mockAgents 56 63 0 7, mockAgents 0 7 56 63 ]
+                |> filterAgentsInRegion interest
     in
     ( { gs
         | cells = updatedCells
+        , agents = updatedAgents
       }
     , Cmd.none
     )
@@ -320,6 +319,14 @@ filterCellsInRegion region =
     List.filter (isCellIn region)
 
 
+{-| Keep only agents that are partially or entirely within the given region in
+game coordinate.
+-}
+filterAgentsInRegion : BoundingBox -> List Agent -> List Agent
+filterAgentsInRegion region =
+    List.filter (isAgentIn region)
+
+
 {-| Gets the region (in game coordinates) for which the client should track
 cells and agents.
 -}
@@ -354,9 +361,25 @@ isCellIn box cell =
     in
     (posX <= box.xMax)
         && (posY <= box.yMax)
-        && -- Add cell width, because if edge of cell is touching region it should be included.
+        && -- Add cell width because if edge of cell is touching region it should be included.
            (posX + 1 >= box.xMin)
         && (posY + 1 >= box.yMin)
+
+
+{-| Checks if agent is within the region defined by the bounding box.
+-}
+isAgentIn : BoundingBox -> Agent -> Bool
+isAgentIn box agent =
+    let
+        ( posX, posY ) =
+            agent.pos
+    in
+    -- Subract agent width because if min edge of agent is within max bounds it should be included
+    (posX - 0.5 <= box.xMax)
+        && (posY - 0.5 <= box.yMax)
+        -- Add agent width because if max edge of agent is within min bounds it should be included.
+        && (posX + 0.5 >= box.xMin)
+        && (posY + 0.5 >= box.yMin)
 
 
 
@@ -426,12 +449,21 @@ gameView viewportSize gs =
         , size = viewportSize
         , camera = gs.camera
         }
-        (renderCells gs.resources gs.cells)
+        (List.concat
+            [ renderableAgents gs.agents
+            , renderableCells gs.resources gs.cells
+            ]
+        )
 
 
-renderCells : Resources -> List Cell -> List Renderable
-renderCells resources =
+renderableCells : Resources -> List Cell -> List Renderable
+renderableCells resources =
     List.map (cellSprite resources)
+
+
+renderableAgents : List Agent -> List Renderable
+renderableAgents =
+    List.map agentCircle
 
 
 cellSprite : Resources -> Cell -> Renderable
@@ -454,11 +486,45 @@ cellSprite resources cell =
                 _ ->
                     "resources/grass4.png"
     in
-    Render.sprite
+    Render.spriteZ
         { texture = Resources.getTexture texture resources
         , position =
             ( Tuple.first cell.pos |> toFloat
-            , Tuple.second cell.pos * 1 |> toFloat
+            , Tuple.second cell.pos |> toFloat
+            , 0
             )
         , size = ( 1, 1 )
         }
+
+
+agentCircle : Agent -> Renderable
+agentCircle agent =
+    let
+        ( width, height ) =
+            ( 0.8, 0.8 )
+
+        ( x, y ) =
+            agent.pos
+    in
+    Render.shapeZ
+        Render.circle
+        { color = Color.hsl 0.061 0.61 0.28
+        , position =
+            ( x - width / 2.0
+            , y - height / 2.0
+            , 0.1
+            )
+        , size = ( width, height )
+        }
+
+
+mockAgents : Int -> Int -> Int -> Int -> List Agent
+mockAgents xMin xMax yMin yMax =
+    range2d xMin xMax yMin yMax
+        |> List.map (\( x, y ) -> { pos = ( toFloat x + 0.5, toFloat y + 0.5 ) })
+
+
+range2d : Int -> Int -> Int -> Int -> List ( Int, Int )
+range2d xMin xMax yMin yMax =
+    List.range yMin yMax
+        |> List.concatMap (\y -> List.range xMin xMax |> List.map (\x -> ( x, y )))
