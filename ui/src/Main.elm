@@ -261,6 +261,9 @@ applyServerUpdates sMsg viewportSize gs =
 updateOnTick : Float -> ( Int, Int ) -> GameState -> ( GameState, Cmd Msg )
 updateOnTick dt viewportSize gs =
     let
+        _ =
+            Debug.log "FPS" (1000.0 / dt)
+
         arrows =
             Keyboard.Arrows.arrows gs.keys
 
