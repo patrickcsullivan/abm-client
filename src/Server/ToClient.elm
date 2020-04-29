@@ -14,7 +14,7 @@ type alias ToClient =
 type alias CellUpdate =
     { x : Int
     , y : Int
-    , grass : Int
+    , growthAmt : Int
     }
 
 
@@ -31,7 +31,7 @@ decoder =
 
 cellUpdateDecoder : D.Decoder CellUpdate
 cellUpdateDecoder =
-    D.map3 (\x y g -> { x = x, y = y, grass = g })
+    D.map3 (\x y g -> { x = x, y = y, growthAmt = g })
         (D.field "x" D.int)
         (D.field "y" D.int)
-        (D.field "grass" D.int)
+        (D.field "growth_amt" D.int)

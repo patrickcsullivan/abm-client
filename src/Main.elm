@@ -3,6 +3,7 @@ module Main exposing (Msg(..), main, update, view)
 import BoundingBox exposing (BoundingBox)
 import Browser
 import Browser.Events exposing (onResize)
+import Color
 import Game.Resources as Resources exposing (Resources)
 import Game.TwoD as Game
 import Game.TwoD.Camera as Camera exposing (Camera)
@@ -66,12 +67,13 @@ type alias GameState =
 
 type alias Agent =
     { pos : ( Float, Float )
+    , heading : Float -- heading in radians
     }
 
 
 type alias Cell =
     { pos : ( Int, Int )
-    , grass : Int
+    , growthAmt : Int
     }
 
 
@@ -81,15 +83,7 @@ init viewportSize =
       , viewportSize = viewportSize
       , loadable = NotStarted
       }
-    , Cmd.map LoadResources
-        (Resources.loadTextures
-            [ "resources/grass0.png"
-            , "resources/grass1.png"
-            , "resources/grass2.png"
-            , "resources/grass3.png"
-            , "resources/grass4.png"
-            ]
-        )
+    , Cmd.none
     )
 
 
@@ -111,18 +105,7 @@ initGameState viewportSize =
       , agents = []
       , camera = camera
       }
-    , Cmd.batch
-        [ Cmd.map LoadResources
-            (Resources.loadTextures
-                [ "resources/grass0.png"
-                , "resources/grass1.png"
-                , "resources/grass2.png"
-                , "resources/grass3.png"
-                , "resources/grass4.png"
-                ]
-            )
-        , Server.Port.sendToServer (RegisterInterest interest)
-        ]
+    , Server.Port.sendToServer (RegisterInterest interest)
     )
 
 
@@ -246,7 +229,7 @@ updateCells sMsg viewportSize gs =
                 |> List.map
                     (\up ->
                         { pos = ( up.x, up.y )
-                        , grass = up.grass
+                        , growthAmt = up.growthAmt
                         }
                     )
                 -- Filter cells in case server sent back uniteresting ones.
@@ -426,36 +409,19 @@ gameView viewportSize gs =
         , size = viewportSize
         , camera = gs.camera
         }
-        (renderCells gs.resources gs.cells)
+        (renderCells gs.cells)
 
 
-renderCells : Resources -> List Cell -> List Renderable
-renderCells resources =
-    List.map (cellSprite resources)
+renderCells : List Cell -> List Renderable
+renderCells =
+    List.map cellShape
 
 
-cellSprite : Resources -> Cell -> Renderable
-cellSprite resources cell =
-    let
-        texture =
-            case cell.grass of
-                0 ->
-                    "resources/grass0.png"
-
-                1 ->
-                    "resources/grass1.png"
-
-                2 ->
-                    "resources/grass2.png"
-
-                3 ->
-                    "resources/grass3.png"
-
-                _ ->
-                    "resources/grass4.png"
-    in
-    Render.sprite
-        { texture = Resources.getTexture texture resources
+cellShape : Cell -> Renderable
+cellShape cell =
+    Render.shape
+        Render.rectangle
+        { color = Color.green
         , position =
             ( Tuple.first cell.pos |> toFloat
             , Tuple.second cell.pos * 1 |> toFloat
