@@ -1,4 +1,4 @@
-module Server.FromClient exposing (FromClient(..), encode)
+module Network.FromClient exposing (FromClient(..), encode)
 
 import BoundingBox exposing (BoundingBox)
 import Json.Encode as E

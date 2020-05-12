@@ -1,4 +1,4 @@
-module Server.ToClient exposing (CellUpdate, ToClient, decoder)
+module Network.ToClient exposing (CellUpdate, ToClient, decoder)
 
 import Json.Decode as D
 import Maybe.Extra as Maybe

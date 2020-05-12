@@ -13,9 +13,9 @@ import Html.Attributes exposing (class, placeholder, value)
 import Html.Events exposing (onClick, onInput)
 import Keyboard
 import Keyboard.Arrows
-import Server.FromClient exposing (FromClient(..))
-import Server.Port
-import Server.ToClient exposing (ToClient)
+import Network.FromClient exposing (FromClient(..))
+import Network.Port
+import Network.ToClient exposing (ToClient)
 
 
 main : Program ( Int, Int ) State Msg
@@ -30,9 +30,9 @@ main =
                     [ Browser.Events.onResize ResizeWindow
                     , Browser.Events.onAnimationFrameDelta Tick
                     , Sub.map PressKeys Keyboard.subscriptions
-                    , Server.Port.onConnectionOpened ConnectionOpen
-                    , Server.Port.onConnectionError ConnectionError
-                    , Server.Port.onReceiveFromServer ReceiveMsgFromServer NoOp
+                    , Network.Port.onConnectionOpened ConnectionOpen
+                    , Network.Port.onConnectionError ConnectionError
+                    , Network.Port.onReceiveFromServer ReceiveMsgFromServer NoOp
                     ]
         }
 
@@ -105,7 +105,7 @@ initGameState viewportSize =
       , agents = []
       , camera = camera
       }
-    , Server.Port.sendToServer (RegisterInterest interest)
+    , Network.Port.sendToServer (RegisterInterest interest)
     )
 
 
@@ -140,7 +140,7 @@ update msg state =
             ( { state
                 | loadable = Loading
               }
-            , Server.Port.connect state.serverUrl
+            , Network.Port.connect state.serverUrl
             )
 
         ConnectionError maybeMsg ->
@@ -284,7 +284,7 @@ updateOnTick dt viewportSize gs =
                 , camera = updatedCamera
                 , cells = updatedCells
               }
-            , Server.Port.sendToServer (RegisterInterest interest)
+            , Network.Port.sendToServer (RegisterInterest interest)
             )
 
         Nothing ->
