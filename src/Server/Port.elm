@@ -62,9 +62,17 @@ onConnectionError msg =
 -}
 onReceiveFromServer : (ToClient -> msg) -> msg -> Sub msg
 onReceiveFromServer onDecodeSuccess onDecodeFail =
+    -- recieveFromServerPort
+    --     (D.decodeValue Server.ToClient.decoder
+    --         >> Result.toMaybe
+    --         >> Maybe.map onDecodeSuccess
+    --         >> Maybe.withDefault onDecodeFail
+    --     )
     recieveFromServerPort
-        (D.decodeValue Server.ToClient.decoder
-            >> Result.toMaybe
-            >> Maybe.map onDecodeSuccess
-            >> Maybe.withDefault onDecodeFail
+        (\_ ->
+            let
+                _ =
+                    Debug.log "MSG"
+            in
+            onDecodeFail
         )
