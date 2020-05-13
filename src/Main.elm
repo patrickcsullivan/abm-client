@@ -13,9 +13,9 @@ import Html.Attributes exposing (class, placeholder, value)
 import Html.Events exposing (onClick, onInput)
 import Keyboard
 import Keyboard.Arrows
-import Network.FromClient exposing (FromClient(..))
+import Network.Message.Incoming exposing (Incoming)
+import Network.Message.Outgoing exposing (Outgoing(..))
 import Network.Port
-import Network.ToClient exposing (ToClient)
 
 
 main : Program ( Int, Int ) State Msg
@@ -66,14 +66,13 @@ type alias GameState =
 
 
 type alias Agent =
-    { pos : ( Float, Float )
+    { position : ( Float, Float )
     , heading : Float -- heading in radians
     }
 
 
 type alias Cell =
     { pos : ( Int, Int )
-    , growthAmt : Int
     }
 
 
@@ -92,7 +91,7 @@ initGameState viewportSize =
     let
         camera =
             Camera.custom
-                (\( w, h ) -> ( w / 75, h / 75 ))
+                (\( w, h ) -> ( w / 15, h / 15 ))
                 ( 0, 0 )
 
         interest =
@@ -101,11 +100,12 @@ initGameState viewportSize =
     ( { time = 0
       , keys = []
       , resources = Resources.init
-      , cells = []
+      , cells = cellsInRegion interest
       , agents = []
       , camera = camera
       }
-    , Network.Port.sendToServer (RegisterInterest interest)
+      -- Send a single message to the server (for now) so it knows we're listening.
+    , Network.Port.sendToServer Outgoing
     )
 
 
@@ -123,7 +123,7 @@ type Msg
     | NoOp
     | ResizeWindow Int Int
     | Tick Float
-    | ReceiveMsgFromServer ToClient
+    | ReceiveMsgFromServer Incoming
 
 
 update : Msg -> State -> ( State, Cmd Msg )
@@ -181,7 +181,7 @@ update msg state =
             updateGameState (updateOnTick dt state.viewportSize) state
 
         ReceiveMsgFromServer sMsg ->
-            updateGameState (updateCells sMsg state.viewportSize) state
+            updateGameState (updateAgents sMsg) state
 
 
 updateGameState : (GameState -> ( GameState, Cmd Msg )) -> State -> ( State, Cmd Msg )
@@ -218,28 +218,43 @@ updateKeys kMsg gs =
     )
 
 
-updateCells : ToClient -> ( Int, Int ) -> GameState -> ( GameState, Cmd Msg )
-updateCells sMsg viewportSize gs =
+updateAgents : Incoming -> GameState -> ( GameState, Cmd Msg )
+updateAgents msg gs =
     let
-        interest =
-            regionOfInterest viewportSize gs.camera
-
-        updatedCells =
-            sMsg.cellUpdates
+        updatedAgents =
+            msg.agentStates
                 |> List.map
-                    (\up ->
-                        { pos = ( up.x, up.y )
-                        , growthAmt = up.growthAmt
-                        }
-                    )
-                -- Filter cells in case server sent back uniteresting ones.
-                |> filterCellsInRegion interest
+                    (\state -> { position = state.position, heading = state.heading })
     in
     ( { gs
-        | cells = updatedCells
+        | agents = updatedAgents
       }
     , Cmd.none
     )
+
+
+
+-- updateCells : ToClient -> ( Int, Int ) -> GameState -> ( GameState, Cmd Msg )
+-- updateCells sMsg viewportSize gs =
+--     let
+--         interest =
+--             regionOfInterest viewportSize gs.camera
+--         updatedCells =
+--             sMsg.cellUpdates
+--                 |> List.map
+--                     (\up ->
+--                         { pos = ( up.x, up.y )
+--                         , growthAmt = up.growthAmt
+--                         }
+--                     )
+--                 -- Filter cells in case server sent back uniteresting ones.
+--                 |> filterCellsInRegion interest
+--     in
+--     ( { gs
+--         | cells = updatedCells
+--       }
+--     , Cmd.none
+--     )
 
 
 updateOnTick : Float -> ( Int, Int ) -> GameState -> ( GameState, Cmd Msg )
@@ -277,14 +292,15 @@ updateOnTick dt viewportSize gs =
                     regionOfInterest viewportSize updatedCamera
 
                 updatedCells =
-                    filterCellsInRegion interest gs.cells
+                    cellsInRegion interest
             in
             ( { gs
                 | time = updatedTime
                 , camera = updatedCamera
                 , cells = updatedCells
               }
-            , Network.Port.sendToServer (RegisterInterest interest)
+            , Cmd.none
+              -- , Network.Port.sendToServer (RegisterInterest interest)
             )
 
         Nothing ->
@@ -295,12 +311,25 @@ updateOnTick dt viewportSize gs =
             )
 
 
-{-| Keep only cells that are partially or entirely within the given region in
-game coordinate.
+{-| Returns cells that are partially or entirely within the given region in
+game coordinates.
 -}
-filterCellsInRegion : BoundingBox -> List Cell -> List Cell
-filterCellsInRegion region =
-    List.filter (isCellIn region)
+cellsInRegion : BoundingBox -> List Cell
+cellsInRegion region =
+    List.range 0 (16 * 16 - 1)
+        |> List.map (\i -> ( modBy 16 i, i // 16 ))
+        |> List.map (\( x, y ) -> { pos = ( x, y ) })
+        |> List.filter
+            (isCellIn region)
+
+
+
+-- {-| Keep only cells that are partially or entirely within the given region in
+-- game coordinate.
+-- -}
+-- filterCellsInRegion : BoundingBox -> List Cell -> List Cell
+-- filterCellsInRegion region =
+--     List.filter (isCellIn region)
 
 
 {-| Gets the region (in game coordinates) for which the client should track
@@ -409,7 +438,9 @@ gameView viewportSize gs =
         , size = viewportSize
         , camera = gs.camera
         }
-        (renderCells gs.cells)
+        (renderCells gs.cells
+            ++ renderAgents gs.agents
+        )
 
 
 renderCells : List Cell -> List Renderable
@@ -423,8 +454,72 @@ cellShape cell =
         Render.rectangle
         { color = Color.green
         , position =
-            ( Tuple.first cell.pos |> toFloat
-            , Tuple.second cell.pos * 1 |> toFloat
+            ( 5 * Tuple.first cell.pos |> toFloat
+            , 5 * Tuple.second cell.pos |> toFloat
             )
-        , size = ( 1, 1 )
+        , size = ( 5, 5 )
         }
+
+
+renderAgents : List Agent -> List Renderable
+renderAgents agents =
+    let
+        _ =
+            Debug.log "Agents" agents
+    in
+    List.concatMap agentShape agents
+
+
+agentShape : Agent -> List Renderable
+agentShape agent =
+    let
+        ( x, y ) =
+            agent.position
+    in
+    [ Render.shapeWithOptions
+        Render.triangle
+        { color = Color.blue
+        , position = ( x, y, 1 )
+        , size = ( -0.5, 1.5 )
+        , rotation = agent.heading - 1.57079632679
+        , pivot = ( 0, 0.5 )
+        }
+    , Render.shapeWithOptions
+        Render.triangle
+        { color = Color.red
+        , position = ( x, y, 1 )
+        , size = ( 0.5, 1.5 )
+        , rotation = agent.heading - 1.57079632679
+        , pivot = ( 0, 0.5 )
+        }
+    ]
+
+
+testAgents : List Agent
+testAgents =
+    [ { heading = -0.9453345, position = ( 64.698494, 77.30139 ) }
+    , { heading = 2.332968, position = ( 16.833345, 79.98595 ) }
+    , { heading = 2.3652072, position = ( 14.322161, 79.98436 ) }
+    , { heading = 2.3636627, position = ( 26.76448, 79.99975 ) }
+    , { heading = 2.039263, position = ( 27.603529, 79.992134 ) }
+    , { heading = 1.8874136, position = ( 26.9267, 79.99786 ) }
+    , { heading = 1.797899, position = ( 6.861332, 79.99554 ) }
+    , { heading = 2.4860365, position = ( 17.305418, 79.98092 ) }
+    , { heading = 1.784747, position = ( 21.7909, 79.98643 ) }
+    , { heading = 1.993496, position = ( 26.641142, 79.988525 ) }
+    , { heading = 2.2453573, position = ( 26.847433, 79.9828 ) }
+    , { heading = 2.1097722, position = ( 31.061018, 79.98663 ) }
+    , { heading = 2.5811248, position = ( 22.692007, 79.99733 ) }
+    , { heading = 1.922796, position = ( 14.726786, 79.98764 ) }
+    , { heading = 1.8642715, position = ( 31.827425, 79.98732 ) }
+    , { heading = 1.7165364, position = ( 1.7492739, 79.991325 ) }
+    , { heading = 2.5094285, position = ( 17.489233, 79.99363 ) }
+    , { heading = 2.1079273, position = ( 21.15088, 79.995834 ) }
+    , { heading = 1.8915762, position = ( 36.57551, 79.990265 ) }
+    , { heading = 1.7060518, position = ( 21.752823, 79.99394 ) }
+    , { heading = 2.213872, position = ( 29.459764, 79.9429 ) }
+    , { heading = 2.100556, position = ( 31.031744, 79.99661 ) }
+    , { heading = 1.629924, position = ( 31.959215, 79.99392 ) }
+    , { heading = 1.6469615, position = ( 21.922392, 79.991875 ) }
+    , { heading = 1.7818282, position = ( 31.735058, 77.07137 ) }
+    ]

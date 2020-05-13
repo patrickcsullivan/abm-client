@@ -9,8 +9,8 @@ port module Network.Port exposing
 import Json.Decode as D
 import Json.Encode as E
 import Maybe.Extra as Maybe
-import Network.FromClient exposing (FromClient)
-import Network.ToClient exposing (ToClient)
+import Network.Message.Incoming exposing (Incoming)
+import Network.Message.Outgoing exposing (Outgoing)
 
 
 port connectPort : E.Value -> Cmd msg
@@ -37,9 +37,9 @@ connect =
 
 {-| Sends a message to the connected server.
 -}
-sendToServer : FromClient -> Cmd msg
+sendToServer : Outgoing -> Cmd msg
 sendToServer =
-    Network.FromClient.encode >> sendToServerPort
+    Network.Message.Outgoing.encode >> sendToServerPort
 
 
 {-| Creates message when a port communicates that a connection to the server has
@@ -60,19 +60,11 @@ onConnectionError msg =
 
 {-| Creates message when the connected server sends a message to the client.
 -}
-onReceiveFromServer : (ToClient -> msg) -> msg -> Sub msg
+onReceiveFromServer : (Incoming -> msg) -> msg -> Sub msg
 onReceiveFromServer onDecodeSuccess onDecodeFail =
-    -- recieveFromServerPort
-    --     (D.decodeValue Network.ToClient.decoder
-    --         >> Result.toMaybe
-    --         >> Maybe.map onDecodeSuccess
-    --         >> Maybe.withDefault onDecodeFail
-    --     )
     recieveFromServerPort
-        (\_ ->
-            let
-                _ =
-                    Debug.log "MSG"
-            in
-            onDecodeFail
+        (D.decodeValue Network.Message.Incoming.decoder
+            >> Result.toMaybe
+            >> Maybe.map onDecodeSuccess
+            >> Maybe.withDefault onDecodeFail
         )
