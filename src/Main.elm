@@ -17,7 +17,7 @@ import Scale
 import Scale.Color
 import TypedSvg exposing (circle, svg)
 import TypedSvg.Attributes exposing (fill, viewBox)
-import TypedSvg.Attributes.InPx exposing (cx, cy, r)
+import TypedSvg.Attributes.InPx as InPx
 import TypedSvg.Core exposing (Svg)
 import TypedSvg.Types exposing (Paint(..))
 
@@ -415,8 +415,7 @@ paneView viewportSize loadable =
                     statusMessageView eMsg
 
                 Loaded gs ->
-                    -- gameView viewportSize gs
-                    svgView viewportSize gs.camera gs.agents
+                    gameView viewportSize gs
     in
     div [ class "pane" ] [ content ]
 
@@ -426,8 +425,19 @@ statusMessageView msg =
     div [ class "status-message" ] [ text msg ]
 
 
-svgView : ( Int, Int ) -> Camera -> List Agent -> Html Msg
-svgView ( vw, vh ) camera agents =
+gameView : ( Int, Int ) -> GameState -> Html Msg
+gameView viewportSize gs =
+    buildSvg viewportSize
+        gs.camera
+        ([ svgBoard ]
+            ++ List.map svgAgent gs.agents
+        )
+
+
+buildSvg : ( Int, Int ) -> Camera -> List (Svg Msg) -> Html Msg
+buildSvg ( vw, vh ) camera svgs =
+    -- TODO: Clean this up.
+    -- TODO: Factor out shared code with regionOfInterest.
     let
         defaultGameCoordToPixel =
             0.1
@@ -446,80 +456,36 @@ svgView ( vw, vh ) camera agents =
 
         svgMinY =
             centerY - svgH / 2.0
+    in
+    svg [ viewBox svgMinX svgMinY svgW svgH ] svgs
+
+
+svgAgent : Agent -> Svg Msg
+svgAgent agent =
+    let
+        ( x, y ) =
+            agent.position
 
         color =
-            Scale.convert (Scale.sequential Scale.Color.viridisInterpolator ( 0, 360 )) 270.0
-
-        makeAgent agent =
-            let
-                ( x, y ) =
-                    agent.position
-            in
-            circle [ cx x, cy y, r 0.5, fill <| Paint color ] []
+            Scale.convert (Scale.sequential Scale.Color.viridisInterpolator ( 0, 360 )) 135.0
     in
-    svg [ viewBox svgMinX svgMinY svgW svgH ] <|
-        List.map makeAgent agents
+    circle [ InPx.cx x, InPx.cy y, InPx.r 0.5, fill <| Paint color ] []
 
 
-
--- gameView : ( Int, Int ) -> GameState -> Html Msg
--- gameView viewportSize gs =
---     Game.render
---         { time = gs.time / 1000
---         , size = viewportSize
---         , camera = gs.camera
---         }
---         (renderCells gs.cells
---             ++ renderAgents gs.agents
---         )
-----
--- renderCells : List Cell -> List Renderable
--- renderCells =
---     List.map cellShape
-----
--- cellShape : Cell -> Renderable
--- cellShape cell =
---     Render.shape
---         Render.rectangle
---         { color = Color.green
---         , position =
---             ( 5 * Tuple.first cell.pos |> toFloat
---             , 5 * Tuple.second cell.pos |> toFloat
---             )
---         , size = ( 5, 5 )
---         }
-----
--- renderAgents : List Agent -> List Renderable
--- renderAgents agents =
---     let
---         _ =
---             Debug.log "Agents" agents
---     in
---     List.concatMap agentShape agents
-----
--- agentShape : Agent -> List Renderable
--- agentShape agent =
---     let
---         ( x, y ) =
---             agent.position
---     in
---     [ Render.shapeWithOptions
---         Render.triangle
---         { color = Color.blue
---         , position = ( x, y, 1 )
---         , size = ( -0.5, 1.5 )
---         , rotation = agent.heading - 1.57079632679
---         , pivot = ( 0, 0.5 )
---         }
---     , Render.shapeWithOptions
---         Render.triangle
---         { color = Color.red
---         , position = ( x, y, 1 )
---         , size = ( 0.5, 1.5 )
---         , rotation = agent.heading - 1.57079632679
---         , pivot = ( 0, 0.5 )
---         }
---     ]
+svgBoard : Svg Msg
+svgBoard =
+    let
+        color =
+            Scale.convert (Scale.sequential Scale.Color.viridisInterpolator ( 0, 360 )) 270.0
+    in
+    TypedSvg.rect
+        [ InPx.x 0.0
+        , InPx.y 0.0
+        , InPx.width 80.0
+        , InPx.height 80.0
+        , fill <| Paint color
+        ]
+        []
 
 
 testAgents : List Agent
