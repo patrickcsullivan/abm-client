@@ -3,7 +3,8 @@ module Main exposing (Msg(..), main, update, view)
 import BoundingBox exposing (BoundingBox)
 import Browser
 import Browser.Events exposing (onResize)
-import Color
+import Color exposing (Color)
+import Force
 import Game.Resources as Resources exposing (Resources)
 import Game.TwoD as Game
 import Game.TwoD.Camera as Camera exposing (Camera)
@@ -16,6 +17,13 @@ import Keyboard.Arrows
 import Network.Message.Incoming exposing (Incoming)
 import Network.Message.Outgoing exposing (Outgoing(..))
 import Network.Port
+import Scale
+import Scale.Color
+import TypedSvg exposing (circle, svg)
+import TypedSvg.Attributes exposing (fill, viewBox)
+import TypedSvg.Attributes.InPx exposing (cx, cy, r)
+import TypedSvg.Core exposing (Svg)
+import TypedSvg.Types exposing (Paint(..))
 
 
 main : Program ( Int, Int ) State Msg
@@ -421,7 +429,8 @@ paneView viewportSize loadable =
                     statusMessageView eMsg
 
                 Loaded gs ->
-                    gameView viewportSize gs
+                    -- gameView viewportSize gs
+                    svgView viewportSize ( 40.0, 40.0 ) 1.0 gs.agents
     in
     div [ class "pane" ] [ content ]
 
@@ -429,6 +438,38 @@ paneView viewportSize loadable =
 statusMessageView : String -> Html Msg
 statusMessageView msg =
     div [ class "status-message" ] [ text msg ]
+
+
+svgView : ( Int, Int ) -> ( Float, Float ) -> Float -> List Agent -> Html Msg
+svgView ( vw, vh ) ( fx, fy ) invZoom agents =
+    let
+        defaultGameCoordToPixel =
+            0.1
+
+        svgW =
+            toFloat vw * defaultGameCoordToPixel * invZoom
+
+        svgH =
+            toFloat vh * defaultGameCoordToPixel * invZoom
+
+        svgX =
+            fx - svgW / 2.0
+
+        svgY =
+            fy - svgH / 2.0
+
+        color =
+            Scale.convert (Scale.sequential Scale.Color.viridisInterpolator ( 0, 360 )) 270.0
+
+        makeAgent agent =
+            let
+                ( x, y ) =
+                    agent.position
+            in
+            circle [ cx x, cy y, r 0.5, fill <| Paint color ] []
+    in
+    svg [ viewBox svgX svgY svgW svgH ] <|
+        List.map makeAgent agents
 
 
 gameView : ( Int, Int ) -> GameState -> Html Msg
@@ -497,29 +538,8 @@ agentShape agent =
 
 testAgents : List Agent
 testAgents =
-    [ { heading = -0.9453345, position = ( 64.698494, 77.30139 ) }
-    , { heading = 2.332968, position = ( 16.833345, 79.98595 ) }
-    , { heading = 2.3652072, position = ( 14.322161, 79.98436 ) }
-    , { heading = 2.3636627, position = ( 26.76448, 79.99975 ) }
-    , { heading = 2.039263, position = ( 27.603529, 79.992134 ) }
-    , { heading = 1.8874136, position = ( 26.9267, 79.99786 ) }
-    , { heading = 1.797899, position = ( 6.861332, 79.99554 ) }
-    , { heading = 2.4860365, position = ( 17.305418, 79.98092 ) }
-    , { heading = 1.784747, position = ( 21.7909, 79.98643 ) }
-    , { heading = 1.993496, position = ( 26.641142, 79.988525 ) }
-    , { heading = 2.2453573, position = ( 26.847433, 79.9828 ) }
-    , { heading = 2.1097722, position = ( 31.061018, 79.98663 ) }
-    , { heading = 2.5811248, position = ( 22.692007, 79.99733 ) }
-    , { heading = 1.922796, position = ( 14.726786, 79.98764 ) }
-    , { heading = 1.8642715, position = ( 31.827425, 79.98732 ) }
-    , { heading = 1.7165364, position = ( 1.7492739, 79.991325 ) }
-    , { heading = 2.5094285, position = ( 17.489233, 79.99363 ) }
-    , { heading = 2.1079273, position = ( 21.15088, 79.995834 ) }
-    , { heading = 1.8915762, position = ( 36.57551, 79.990265 ) }
-    , { heading = 1.7060518, position = ( 21.752823, 79.99394 ) }
-    , { heading = 2.213872, position = ( 29.459764, 79.9429 ) }
-    , { heading = 2.100556, position = ( 31.031744, 79.99661 ) }
-    , { heading = 1.629924, position = ( 31.959215, 79.99392 ) }
-    , { heading = 1.6469615, position = ( 21.922392, 79.991875 ) }
-    , { heading = 1.7818282, position = ( 31.735058, 77.07137 ) }
+    [ { heading = -0.9453345, position = ( 0.0, 0.0 ) }
+    , { heading = -0.9453345, position = ( 80.0, 80.0 ) }
+    , { heading = -0.9453345, position = ( 80.0, 0.0 ) }
+    , { heading = -0.9453345, position = ( 0.0, 80.0 ) }
     ]
