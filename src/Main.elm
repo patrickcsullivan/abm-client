@@ -3,12 +3,8 @@ module Main exposing (Msg(..), main, update, view)
 import BoundingBox exposing (BoundingBox)
 import Browser
 import Browser.Events exposing (onResize)
+import Camera exposing (Camera)
 import Color exposing (Color)
-import Force
-import Game.Resources as Resources exposing (Resources)
-import Game.TwoD as Game
-import Game.TwoD.Camera as Camera exposing (Camera)
-import Game.TwoD.Render as Render exposing (Renderable)
 import Html exposing (Html, a, div, input, text)
 import Html.Attributes exposing (class, placeholder, value)
 import Html.Events exposing (onClick, onInput)
@@ -66,7 +62,6 @@ type Loadable a
 type alias GameState =
     { time : Float -- time in ms
     , keys : List Keyboard.Key -- keys currently pressed
-    , resources : Resources
     , cells : List Cell
     , agents : List Agent
     , camera : Camera
@@ -98,16 +93,13 @@ initGameState : ( Int, Int ) -> ( GameState, Cmd Msg )
 initGameState viewportSize =
     let
         camera =
-            Camera.custom
-                (\( w, h ) -> ( w / 15, h / 15 ))
-                ( 0, 0 )
+            Camera.at ( 40.0, 40.0 )
 
         interest =
             regionOfInterest viewportSize camera
     in
     ( { time = 0
       , keys = []
-      , resources = Resources.init
       , cells = cellsInRegion interest
       , agents = []
       , camera = camera
@@ -126,7 +118,6 @@ type Msg
     | ClickConnect
     | ConnectionError (Maybe String)
     | ConnectionOpen
-    | LoadResources Resources.Msg
     | PressKeys Keyboard.Msg
     | NoOp
     | ResizeWindow Int Int
@@ -169,9 +160,6 @@ update msg state =
             , cmd
             )
 
-        LoadResources rMsg ->
-            updateGameState (updateResources rMsg) state
-
         NoOp ->
             ( state, Cmd.none )
 
@@ -206,15 +194,6 @@ updateGameState f state =
 
         _ ->
             ( state, Cmd.none )
-
-
-updateResources : Resources.Msg -> GameState -> ( GameState, Cmd Msg )
-updateResources rMsg gs =
-    ( { gs
-        | resources = Resources.update rMsg gs.resources
-      }
-    , Cmd.none
-    )
 
 
 updateKeys : Keyboard.Msg -> GameState -> ( GameState, Cmd Msg )
@@ -273,9 +252,9 @@ updateOnTick dt viewportSize gs =
 
         v =
             -- units per second
-            8
+            32
 
-        cameraMove : Maybe ( Float, Float, Float )
+        cameraMove : Maybe ( Float, Float )
         cameraMove =
             if arrows.x == 0 && arrows.y == 0 then
                 Nothing
@@ -283,12 +262,11 @@ updateOnTick dt viewportSize gs =
             else
                 Just
                     ( toFloat arrows.x * v * dt / 1000
-                    , toFloat arrows.y * v * dt / 1000
-                    , 0
+                    , -1 * toFloat arrows.y * v * dt / 1000
                     )
     in
     case cameraMove of
-        Just ( dx, dy, _ ) ->
+        Just ( dx, dy ) ->
             let
                 updatedTime =
                     gs.time + dt
@@ -344,23 +322,31 @@ cellsInRegion region =
 cells and agents.
 -}
 regionOfInterest : ( Int, Int ) -> Camera -> BoundingBox
-regionOfInterest viewportSize camera =
+regionOfInterest ( vw, vh ) camera =
     let
-        ( camCenterX, camCenterY ) =
-            camera |> Camera.getPosition
+        defaultGameCoordToPixel =
+            0.1
 
-        ( camSizeX, camSizeY ) =
-            camera
-                |> Camera.getViewSize (viewportSize |> Tuple.mapBoth toFloat toFloat)
+        svgW =
+            toFloat vw * defaultGameCoordToPixel / camera.zoomFactor
+
+        svgH =
+            toFloat vh * defaultGameCoordToPixel / camera.zoomFactor
+
+        svgX =
+            Tuple.first camera.center - svgW / 2.0
+
+        svgY =
+            Tuple.second camera.center - svgH / 2.0
 
         -- Extra space around the camera that is also of interest
         extra =
             2
     in
-    { xMin = camCenterX - camSizeX / 2 - extra
-    , xMax = camCenterX + camSizeX / 2 + extra
-    , yMin = camCenterY - camSizeY / 2 - extra
-    , yMax = camCenterY + camSizeY / 2 + extra
+    { xMin = svgX - extra
+    , xMax = svgX + svgW + extra
+    , yMin = svgY - extra
+    , yMax = svgY + svgH + extra
     }
 
 
@@ -430,7 +416,7 @@ paneView viewportSize loadable =
 
                 Loaded gs ->
                     -- gameView viewportSize gs
-                    svgView viewportSize ( 40.0, 40.0 ) 1.0 gs.agents
+                    svgView viewportSize gs.camera gs.agents
     in
     div [ class "pane" ] [ content ]
 
@@ -440,23 +426,26 @@ statusMessageView msg =
     div [ class "status-message" ] [ text msg ]
 
 
-svgView : ( Int, Int ) -> ( Float, Float ) -> Float -> List Agent -> Html Msg
-svgView ( vw, vh ) ( fx, fy ) invZoom agents =
+svgView : ( Int, Int ) -> Camera -> List Agent -> Html Msg
+svgView ( vw, vh ) camera agents =
     let
         defaultGameCoordToPixel =
             0.1
 
+        ( centerX, centerY ) =
+            camera.center
+
         svgW =
-            toFloat vw * defaultGameCoordToPixel * invZoom
+            toFloat vw * defaultGameCoordToPixel / camera.zoomFactor
 
         svgH =
-            toFloat vh * defaultGameCoordToPixel * invZoom
+            toFloat vh * defaultGameCoordToPixel / camera.zoomFactor
 
-        svgX =
-            fx - svgW / 2.0
+        svgMinX =
+            centerX - svgW / 2.0
 
-        svgY =
-            fy - svgH / 2.0
+        svgMinY =
+            centerY - svgH / 2.0
 
         color =
             Scale.convert (Scale.sequential Scale.Color.viridisInterpolator ( 0, 360 )) 270.0
@@ -468,72 +457,69 @@ svgView ( vw, vh ) ( fx, fy ) invZoom agents =
             in
             circle [ cx x, cy y, r 0.5, fill <| Paint color ] []
     in
-    svg [ viewBox svgX svgY svgW svgH ] <|
+    svg [ viewBox svgMinX svgMinY svgW svgH ] <|
         List.map makeAgent agents
 
 
-gameView : ( Int, Int ) -> GameState -> Html Msg
-gameView viewportSize gs =
-    Game.render
-        { time = gs.time / 1000
-        , size = viewportSize
-        , camera = gs.camera
-        }
-        (renderCells gs.cells
-            ++ renderAgents gs.agents
-        )
 
-
-renderCells : List Cell -> List Renderable
-renderCells =
-    List.map cellShape
-
-
-cellShape : Cell -> Renderable
-cellShape cell =
-    Render.shape
-        Render.rectangle
-        { color = Color.green
-        , position =
-            ( 5 * Tuple.first cell.pos |> toFloat
-            , 5 * Tuple.second cell.pos |> toFloat
-            )
-        , size = ( 5, 5 )
-        }
-
-
-renderAgents : List Agent -> List Renderable
-renderAgents agents =
-    let
-        _ =
-            Debug.log "Agents" agents
-    in
-    List.concatMap agentShape agents
-
-
-agentShape : Agent -> List Renderable
-agentShape agent =
-    let
-        ( x, y ) =
-            agent.position
-    in
-    [ Render.shapeWithOptions
-        Render.triangle
-        { color = Color.blue
-        , position = ( x, y, 1 )
-        , size = ( -0.5, 1.5 )
-        , rotation = agent.heading - 1.57079632679
-        , pivot = ( 0, 0.5 )
-        }
-    , Render.shapeWithOptions
-        Render.triangle
-        { color = Color.red
-        , position = ( x, y, 1 )
-        , size = ( 0.5, 1.5 )
-        , rotation = agent.heading - 1.57079632679
-        , pivot = ( 0, 0.5 )
-        }
-    ]
+-- gameView : ( Int, Int ) -> GameState -> Html Msg
+-- gameView viewportSize gs =
+--     Game.render
+--         { time = gs.time / 1000
+--         , size = viewportSize
+--         , camera = gs.camera
+--         }
+--         (renderCells gs.cells
+--             ++ renderAgents gs.agents
+--         )
+----
+-- renderCells : List Cell -> List Renderable
+-- renderCells =
+--     List.map cellShape
+----
+-- cellShape : Cell -> Renderable
+-- cellShape cell =
+--     Render.shape
+--         Render.rectangle
+--         { color = Color.green
+--         , position =
+--             ( 5 * Tuple.first cell.pos |> toFloat
+--             , 5 * Tuple.second cell.pos |> toFloat
+--             )
+--         , size = ( 5, 5 )
+--         }
+----
+-- renderAgents : List Agent -> List Renderable
+-- renderAgents agents =
+--     let
+--         _ =
+--             Debug.log "Agents" agents
+--     in
+--     List.concatMap agentShape agents
+----
+-- agentShape : Agent -> List Renderable
+-- agentShape agent =
+--     let
+--         ( x, y ) =
+--             agent.position
+--     in
+--     [ Render.shapeWithOptions
+--         Render.triangle
+--         { color = Color.blue
+--         , position = ( x, y, 1 )
+--         , size = ( -0.5, 1.5 )
+--         , rotation = agent.heading - 1.57079632679
+--         , pivot = ( 0, 0.5 )
+--         }
+--     , Render.shapeWithOptions
+--         Render.triangle
+--         { color = Color.red
+--         , position = ( x, y, 1 )
+--         , size = ( 0.5, 1.5 )
+--         , rotation = agent.heading - 1.57079632679
+--         , pivot = ( 0, 0.5 )
+--         }
+--     ]
 
 
 testAgents : List Agent
