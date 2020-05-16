@@ -13,6 +13,7 @@ type alias Incoming =
 type alias AgentState =
     { position : ( Float, Float )
     , heading : Float
+    , behavior : Int
     }
 
 
@@ -24,9 +25,10 @@ decoder =
 
 agentStateDecoder : D.Decoder AgentState
 agentStateDecoder =
-    D.map2 (\pos h -> { position = pos, heading = h })
+    D.map3 (\pos h b -> { position = pos, heading = h, behavior = b })
         (D.field "position" positionDecoder)
         (D.field "heading" D.float)
+        (D.field "behavior" D.int)
 
 
 positionDecoder : D.Decoder ( Float, Float )

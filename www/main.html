@@ -51,6 +51,7 @@
 
         socket.onmessage = function (event) {
             let msg = JSON.parse(event.data);
+            console.log("MSG", msg);
             app.ports.recieveFromServerPort.send(msg);
         }
 

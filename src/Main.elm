@@ -71,7 +71,14 @@ type alias GameState =
 type alias Agent =
     { position : ( Float, Float )
     , heading : Float -- heading in radians
+    , behavior : Behavior
     }
+
+
+type Behavior
+    = Stationary
+    | Walking
+    | Running
 
 
 type alias Cell =
@@ -208,10 +215,29 @@ updateKeys kMsg gs =
 updateAgents : Incoming -> GameState -> ( GameState, Cmd Msg )
 updateAgents msg gs =
     let
+        decodeBehaviorFlag f =
+            case f of
+                0 ->
+                    Stationary
+
+                1 ->
+                    Walking
+
+                2 ->
+                    Running
+
+                _ ->
+                    Stationary
+
         updatedAgents =
             msg.agentStates
                 |> List.map
-                    (\state -> { position = state.position, heading = state.heading })
+                    (\agentState ->
+                        { position = agentState.position
+                        , heading = agentState.heading
+                        , behavior = decodeBehaviorFlag agentState.behavior
+                        }
+                    )
     in
     ( { gs
         | agents = updatedAgents
@@ -467,7 +493,15 @@ svgAgent agent =
             agent.position
 
         color =
-            Scale.convert (Scale.sequential Scale.Color.viridisInterpolator ( 0, 360 )) 135.0
+            case agent.behavior of
+                Stationary ->
+                    Color.rgb255 127 127 127
+
+                Walking ->
+                    Color.rgb255 31 119 180
+
+                Running ->
+                    Color.rgb255 214 39 40
     in
     circle [ InPx.cx x, InPx.cy y, InPx.r 0.5, fill <| Paint color ] []
 
@@ -476,7 +510,7 @@ svgBoard : Svg Msg
 svgBoard =
     let
         color =
-            Scale.convert (Scale.sequential Scale.Color.viridisInterpolator ( 0, 360 )) 270.0
+            Color.rgb255 106 230 112
     in
     TypedSvg.rect
         [ InPx.x 0.0
@@ -486,12 +520,3 @@ svgBoard =
         , fill <| Paint color
         ]
         []
-
-
-testAgents : List Agent
-testAgents =
-    [ { heading = -0.9453345, position = ( 0.0, 0.0 ) }
-    , { heading = -0.9453345, position = ( 80.0, 80.0 ) }
-    , { heading = -0.9453345, position = ( 80.0, 0.0 ) }
-    , { heading = -0.9453345, position = ( 0.0, 80.0 ) }
-    ]
